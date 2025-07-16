@@ -277,7 +277,7 @@ namespace YMM4FileExplorer
                     },
                     new TextBlock
                     {
-                        Text = name
+                        Text = name,
                     }
                 }
             };
