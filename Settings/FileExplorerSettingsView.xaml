@@ -1,0 +1,30 @@
+﻿<UserControl x:Class="YMM4FileExplorer.Settings.FileExplorerSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:YMM4FileExplorer.Settings"
+             xmlns:c="clr-namespace:YukkuriMovieMaker.Controls;assembly=YukkuriMovieMaker.Controls"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+
+    <StackPanel>
+        <Expander Header="YMM4エクスプローラー" IsExpanded="True">
+            <StackPanel>
+                <Grid>
+                    <Label Content="起動時にアップデートを確認する"/>
+                    <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=IsCheckVersion}" HorizontalAlignment="Right"/>
+                </Grid>
+                <Grid>
+                    <Label Content="常に手前に表示する"/>
+                    <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=IsTopmost}" HorizontalAlignment="Right"/>
+                </Grid>
+                <Grid>
+                    <Label Content="隠しファイルを表示する"/>
+                    <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=ShowHiddenFiles}" HorizontalAlignment="Right"/>
+                </Grid>
+            </StackPanel>
+        </Expander>
+    </StackPanel>
+
+</UserControl>
