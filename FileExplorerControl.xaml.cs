@@ -277,7 +277,7 @@ namespace YMM4FileExplorer
                     },
                     new TextBlock
                     {
-                        Text = name,
+                        Text = name
                     }
                 }
             };
@@ -286,6 +286,20 @@ namespace YMM4FileExplorer
         private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _dragStartPoint = e.GetPosition(null);
+
+            var listView = sender as ListView;
+            if(listView is not null)
+            {
+                var clickedItem = VisualTreeHelper.HitTest(listView, e.GetPosition(listView))?.VisualHit;
+                while (clickedItem != null && clickedItem is not ListViewItem)
+                {
+                    clickedItem = VisualTreeHelper.GetParent(clickedItem);
+                }
+
+                if (clickedItem is not ListViewItem)
+                    listView.SelectedItem = null;
+                
+            }
         }
 
         private void FileList_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -423,6 +437,7 @@ namespace YMM4FileExplorer
                         var media = new MediaElement
                         {
                             Source = new Uri(fullPath),
+                            Volume = FileExplorerSettings.Default.PreviewVolume,
                             Stretch = Stretch.Uniform,
                             LoadedBehavior = MediaState.Manual,
                             UnloadedBehavior = MediaState.Manual

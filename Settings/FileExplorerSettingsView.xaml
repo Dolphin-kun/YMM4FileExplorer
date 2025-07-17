@@ -8,6 +8,10 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
 
+    <UserControl.Resources>
+        <local:PercentageConverter  x:Key="PercentageConverter"/>
+    </UserControl.Resources>
+
     <StackPanel>
         <Expander Header="YMM4エクスプローラー" IsExpanded="True">
             <StackPanel>
@@ -22,6 +26,46 @@
                 <Grid>
                     <Label Content="隠しファイルを表示する"/>
                     <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=ShowHiddenFiles}" HorizontalAlignment="Right"/>
+                </Grid>
+            </StackPanel>
+        </Expander>
+        <Expander Header="プレビュー" IsExpanded="True">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="60"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="150"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Label Content="プレビューの音量" VerticalAlignment="Center" Grid.Column="0"/>
+
+                    <TextBox 
+                        Text="{Binding Source={x:Static local:FileExplorerSettings.Default}, Path=PreviewVolume, Converter={StaticResource PercentageConverter}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        HorizontalContentAlignment="Right"
+                        Margin="0,0,0,0"
+                        Width="50"
+                        Background="Transparent"
+                        BorderBrush="Transparent"/>
+                    <TextBlock
+                        Text="%"
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Width="10"/>
+
+                    <Slider 
+                        Minimum="0" 
+                        Maximum="1" 
+                        Value="{Binding Source={x:Static local:FileExplorerSettings.Default}, Path=PreviewVolume}"
+                        TickFrequency="0.01"
+                        IsSnapToTickEnabled="True"
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        Margin="10,0"/>
+
                 </Grid>
             </StackPanel>
         </Expander>

@@ -22,6 +22,9 @@ namespace YMM4FileExplorer.Settings
         public string LastOpenedDirectory { get => lastOpenedDirectory; set => Set(ref lastOpenedDirectory, value); }
         private string lastOpenedDirectory = "";
 
+        public double PreviewVolume { get => previewVolume; set => Set(ref previewVolume, value); }
+        private double previewVolume = 0.5;
+
         public override void Initialize()
         {
         }

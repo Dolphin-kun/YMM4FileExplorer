@@ -8,6 +8,5 @@ namespace YMM4FileExplorer.Settings
         {
             InitializeComponent();
         }
-
     }
 }
