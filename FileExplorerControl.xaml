@@ -42,6 +42,7 @@
 
         <ListView Name="FileList" 
                   Grid.Column="1"
+                  SelectionMode="Extended"
                   PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
                   PreviewMouseMove="FileList_PreviewMouseMove"
                   MouseDoubleClick="FileList_MouseDoubleClick"

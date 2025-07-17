@@ -61,7 +61,22 @@ namespace YMM4FileExplorer
             if (parentWindow != null)
             {
                 parentWindow.Title = "YMM4 エクスプローラー";
-                parentWindow.Topmost = FileExplorerSettings.Default.IsTopmost;
+
+                if (FileExplorerSettings.Default.IsTopmost)
+                {
+                    parentWindow.Topmost = true;
+
+                    parentWindow.Deactivated += (s, args) =>
+                    {
+                        parentWindow.Topmost = false;
+                    };
+
+                    parentWindow.Activated += (s, args) =>
+                    {
+                        parentWindow.Topmost = true;
+                    };
+                }
+
             }
 
             if (FileExplorerSettings.Default.IsCheckVersion && await GetVersion.CheckVersionAsync("YMM4エクスプローラー"))
@@ -287,18 +302,24 @@ namespace YMM4FileExplorer
         {
             _dragStartPoint = e.GetPosition(null);
 
-            var listView = sender as ListView;
-            if(listView is not null)
+            DependencyObject? source = e.OriginalSource as DependencyObject;
+            while (source != null && source is not ListViewItem)
             {
-                var clickedItem = VisualTreeHelper.HitTest(listView, e.GetPosition(listView))?.VisualHit;
-                while (clickedItem != null && clickedItem is not ListViewItem)
-                {
-                    clickedItem = VisualTreeHelper.GetParent(clickedItem);
-                }
+                source = VisualTreeHelper.GetParent(source);
+            }
 
-                if (clickedItem is not ListViewItem)
+            if (source is ListViewItem clickedItem && clickedItem.IsSelected && e.ClickCount == 1 &&
+                !Keyboard.IsKeyDown(Key.LeftCtrl) && !Keyboard.IsKeyDown(Key.RightCtrl) &&
+                !Keyboard.IsKeyDown(Key.LeftShift) && !Keyboard.IsKeyDown(Key.RightShift))
+            {
+                e.Handled = true;
+            }
+            else if (source is not ListViewItem)
+            {
+                if (sender is ListView listView)
+                {
                     listView.SelectedItem = null;
-                
+                }
             }
         }
 
@@ -312,14 +333,24 @@ namespace YMM4FileExplorer
                 if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
                     Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
                 {
-                    if (FileList.SelectedItem is FileItem file &&
-                        !string.IsNullOrEmpty(file.Name) &&
-                        _currentDirectory != null)
+                    var selectedItems = FileList.SelectedItems;
+                    if (selectedItems != null && selectedItems.Count > 0 && _currentDirectory != null)
                     {
-                        string fullPath = Path.Combine(_currentDirectory, file.Name);
-                        DataObject data = new(DataFormats.FileDrop, new string[] { fullPath });
+                        var filePaths = new List<string>();
+                        foreach (var item in selectedItems)
+                        {
+                            if (item is FileItem file && !string.IsNullOrEmpty(file.Name))
+                            {
+                                string fullPath = Path.Combine(_currentDirectory, file.Name);
+                                filePaths.Add(fullPath);
+                            }
+                        }
 
-                        DragDrop.DoDragDrop(FileList, data, DragDropEffects.Copy);
+                        if (filePaths.Count > 0)
+                        {
+                            DataObject data = new(DataFormats.FileDrop, filePaths.ToArray());
+                            DragDrop.DoDragDrop(FileList, data, DragDropEffects.Copy);
+                        }
                     }
                 }
             }
