@@ -39,9 +39,16 @@ namespace YMM4FileExplorer
         //preview
         private readonly DispatcherTimer _timer;
 
-        public FileExplorerControl()
+        //Save
+        private readonly string _initialPath;
+        private bool _isInitialContentLoaded = false;
+        public event Action<string>? PathChanged;
+
+        public FileExplorerControl(string initialPath = "C:\\")
         {
             InitializeComponent();
+
+            _initialPath = initialPath;
 
             this.Loaded += FileExplorerControl_Loaded;
             this.Unloaded += FileExplorerControl_Unloaded;
@@ -57,6 +64,11 @@ namespace YMM4FileExplorer
 
         private async void FileExplorerControl_Loaded(object sender, RoutedEventArgs e)
         {
+            if (_isInitialContentLoaded)
+                return;
+            
+            _isInitialContentLoaded = true;
+
             var parentWindow = Window.GetWindow(this);
             if (parentWindow != null)
             {
@@ -81,9 +93,9 @@ namespace YMM4FileExplorer
 
             if (FileExplorerSettings.Default.IsCheckVersion && await GetVersion.CheckVersionAsync("YMM4エクスプローラー"))
             {
-                string url = "https://ymm4-info.net/";
+                string url = "https://ymm4-info.net/ymme/YMM4%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%97%E3%83%AD%E3%83%BC%E3%83%A9%E3%83%BC%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3";
                 var result = MessageBox.Show(
-                    $"新しいバージョンがあります。\n\n最新バージョンを確認しますか？\n{url}",
+                    $"新しいバージョンがあります。\n\n最新バージョンを確認しますか？\nOKを押すと配布サイトが開きます。\n{url}",
                     "YMM4エクスプローラープラグイン",
                     MessageBoxButton.OKCancel,
                     MessageBoxImage.Information);
@@ -104,10 +116,14 @@ namespace YMM4FileExplorer
 
             LoadDrives();
 
-            var lastPath = FileExplorerSettings.Default.LastOpenedDirectory;
-            if (!string.IsNullOrEmpty(lastPath) && Directory.Exists(lastPath))
+            NavigateToInitialPath(_initialPath);
+        }
+
+        private void NavigateToInitialPath(string path)
+        {
+            if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
             {
-                SelectTreeViewItemByPath(lastPath);
+                SelectTreeViewItemByPath(path);
             }
         }
 
@@ -118,16 +134,27 @@ namespace YMM4FileExplorer
 
         private void LoadDrives()
         {
+
             foreach (var drive in DriveInfo.GetDrives())
             {
                 if (!drive.IsReady) continue;
+                DirectoryTree.Items.Clear();
 
                 var item = new TreeViewItem
                 {
                     Header = CreateTreeViewItemHeader(drive.Name, drive.RootDirectory.FullName),
                     Tag = drive.RootDirectory.FullName
                 };
-                item.Items.Add(null);
+
+                try
+                {
+                    if (Directory.EnumerateDirectories(drive.RootDirectory.FullName).Any())
+                    {
+                        item.Items.Add(null);
+                    }
+                }
+                catch { }
+
                 item.Expanded += Folder_Expanded;
 
                 DirectoryTree.Items.Add(item);
@@ -168,6 +195,9 @@ namespace YMM4FileExplorer
                 if (currentItem != null)
                 {
                     currentItem.IsExpanded = true;
+                    
+                    ExpandNode(currentItem);
+
                     parent = currentItem;
                     finalItem = currentItem;
                 }
@@ -185,7 +215,14 @@ namespace YMM4FileExplorer
 
         private void Folder_Expanded(object sender, RoutedEventArgs e)
         {
-            var item = (TreeViewItem)sender;
+            if (sender is TreeViewItem item)
+            {
+                ExpandNode(item);
+            }
+        }
+
+        private void ExpandNode(TreeViewItem item)
+        {
             if (item.Items.Count == 1 && item.Items[0] == null)
             {
                 item.Items.Clear();
@@ -196,13 +233,22 @@ namespace YMM4FileExplorer
                     {
                         if (!FileExplorerSettings.Default.ShowHiddenFiles && dir.Attributes.HasFlag(FileAttributes.Hidden))
                             continue;
-                        
+
                         var subItem = new TreeViewItem
                         {
                             Header = CreateTreeViewItemHeader(dir.Name, dir.FullName),
                             Tag = dir.FullName
                         };
-                        subItem.Items.Add(null);
+
+                        try
+                        {
+                            if (Directory.EnumerateDirectories(dir.FullName).Any())
+                            {
+                                subItem.Items.Add(null);
+                            }
+                        }
+                        catch { }
+
                         subItem.Expanded += Folder_Expanded;
                         item.Items.Add(subItem);
                     }
@@ -210,6 +256,7 @@ namespace YMM4FileExplorer
                 catch { }
             }
         }
+
 
         private void DirectoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
@@ -232,8 +279,7 @@ namespace YMM4FileExplorer
                     _watcher.Deleted += OnFileSystemChanged;
                     _watcher.Renamed += OnFileSystemChanged;
 
-                    FileExplorerSettings.Default.LastOpenedDirectory = path;
-                    FileExplorerSettings.Default.Save();
+                    PathChanged?.Invoke(path);
                 }
             }
         }

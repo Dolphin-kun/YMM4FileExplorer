@@ -19,11 +19,11 @@ namespace YMM4FileExplorer.Settings
         public bool ShowHiddenFiles { get => showHiddenFiles; set => Set(ref showHiddenFiles, value); }
         private bool showHiddenFiles = false;
 
-        public string LastOpenedDirectory { get => lastOpenedDirectory; set => Set(ref lastOpenedDirectory, value); }
-        private string lastOpenedDirectory = "";
-
         public double PreviewVolume { get => previewVolume; set => Set(ref previewVolume, value); }
         private double previewVolume = 0.5;
+
+        public string SavedTabsJson { get => savedTabsJson; set => Set(ref savedTabsJson, value); }
+        private string savedTabsJson = string.Empty;
 
         public override void Initialize()
         {

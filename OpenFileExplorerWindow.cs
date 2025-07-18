@@ -6,8 +6,8 @@ namespace YMM4FileExplorer
     {
         public string Name => "YMM4エクスプローラー";
 
-        public Type ViewModelType => typeof(OpenFileExplorerWindowViewModel);
+        public Type ViewModelType => typeof(ViewModelBase);
 
-        public Type ViewType => typeof(FileExplorerControl);
+        public Type ViewType => typeof(FileExplorerTabControl);
     }
 }

@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:YMM4FileExplorer.Settings"
+             xmlns:theme="clr-namespace:YukkuriMovieMaker.Theme;assembly=YukkuriMovieMaker.Plugin"
              xmlns:c="clr-namespace:YukkuriMovieMaker.Controls;assembly=YukkuriMovieMaker.Controls"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
@@ -12,13 +13,30 @@
         <local:PercentageConverter  x:Key="PercentageConverter"/>
     </UserControl.Resources>
 
-    <StackPanel>
+    <StackPanel Focusable="True"
+                PreviewMouseLeftButtonDown="ParentPanel_PreviewMouseLeftButtonDown">
+
+        <Expander Header="プラグイン設定" IsExpanded="True">
+            <Border BorderBrush="{DynamicResource {x:Static theme:YMM4Colors.IconBrushKey}}" BorderThickness="0.5" Margin="5" Padding="5" CornerRadius="4">
+                <StackPanel>
+                    <Grid>
+                        <Label Content="現在のバージョン" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="VersionTextBlock"
+                           HorizontalAlignment="Right" 
+                           VerticalAlignment="Center"
+                           Opacity="0.7"/>
+                    </Grid>
+
+                    <Grid>
+                        <Label Content="起動時にアップデートを確認する"/>
+                        <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=IsCheckVersion}" HorizontalAlignment="Right"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Expander>
+
         <Expander Header="YMM4エクスプローラー" IsExpanded="True">
             <StackPanel>
-                <Grid>
-                    <Label Content="起動時にアップデートを確認する"/>
-                    <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=IsCheckVersion}" HorizontalAlignment="Right"/>
-                </Grid>
                 <Grid>
                     <Label Content="常に手前に表示する"/>
                     <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=IsTopmost}" HorizontalAlignment="Right"/>
@@ -29,6 +47,7 @@
                 </Grid>
             </StackPanel>
         </Expander>
+        
         <Expander Header="プレビュー" IsExpanded="True">
             <StackPanel>
                 <Grid>
