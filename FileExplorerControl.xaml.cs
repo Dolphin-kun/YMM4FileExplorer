@@ -134,11 +134,11 @@ namespace YMM4FileExplorer
 
         private void LoadDrives()
         {
+            DirectoryTree.Items.Clear();
 
             foreach (var drive in DriveInfo.GetDrives())
             {
                 if (!drive.IsReady) continue;
-                DirectoryTree.Items.Clear();
 
                 var item = new TreeViewItem
                 {
