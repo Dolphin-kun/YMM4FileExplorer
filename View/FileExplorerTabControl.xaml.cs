@@ -114,9 +114,17 @@ namespace YMM4FileExplorer
 
         #region UIイベントハンドラ
 
-        private void AddTab_Click(object sender, RoutedEventArgs e)
+        private async void AddTab_Click(object sender, RoutedEventArgs e)
         {
-            AddNewTab($"新しいタブ {Tabs.Count + 1}", "C:\\");
+            try
+            {
+                AddNewTab($"新しいタブ {Tabs.Count + 1}", "C:\\");
+                await SaveTabsStateAsync();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.WriteLine($"タブ追加中にエラーが発生しました: {ex.Message}");
+            }
         }
 
         private async void CloseTab_Click(object sender, RoutedEventArgs e)
