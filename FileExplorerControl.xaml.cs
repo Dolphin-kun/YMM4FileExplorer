@@ -64,9 +64,28 @@ namespace YMM4FileExplorer
 
         private async void FileExplorerControl_Loaded(object sender, RoutedEventArgs e)
         {
+            try
+            {
+                await InitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                // エラー処理を追加
+                Debug.WriteLine($"初期化中にエラーが発生しました: {ex.Message}");
+                MessageBox.Show(
+                    "初期化中にエラーが発生しました。\n" + ex.Message,
+                    "エラー",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                );
+            }
+        }
+
+        private async Task InitializeAsync()
+        {
             if (_isInitialContentLoaded)
                 return;
-            
+
             _isInitialContentLoaded = true;
 
             var parentWindow = Window.GetWindow(this);
@@ -88,7 +107,6 @@ namespace YMM4FileExplorer
                         parentWindow.Topmost = true;
                     };
                 }
-
             }
 
             if (FileExplorerSettings.Default.IsCheckVersion && await GetVersion.CheckVersionAsync("YMM4エクスプローラー"))
@@ -195,7 +213,7 @@ namespace YMM4FileExplorer
                 if (currentItem != null)
                 {
                     currentItem.IsExpanded = true;
-                    
+
                     ExpandNode(currentItem);
 
                     parent = currentItem;
@@ -600,10 +618,10 @@ namespace YMM4FileExplorer
         {
             if (!PreviewPopup.IsOpen)
                 return;
-           
+
             if (PreviewPopup.Child != null && PreviewPopup.Child.IsMouseOver)
                 return;
-            
+
             PreviewPopup.IsOpen = false;
         }
 
