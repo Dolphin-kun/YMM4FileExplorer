@@ -686,8 +686,9 @@ namespace YMM4FileExplorer
             }
             else if (
                 PreviewContent.Content is Grid grid
-             grid.Children.Count == 2 &&
-             grid.Children[1] is MediaElement audioMedia)
+                && grid.Children.Count == 2
+                && grid.Children[1] is MediaElement audioMedia
+            )
             {
                 audioMedia.Close();
             }
