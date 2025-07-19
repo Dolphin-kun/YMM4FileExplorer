@@ -576,7 +576,7 @@ namespace YMM4FileExplorer
                     case ".jpeg":
                     case ".bmp":
                     case ".gif":
-                        var bitmap = await Task.Run(() => new BitmapImage(new Uri(fullPath)));
+                        var bitmap = await LoadImageAsync(fullPath);
                         var image = new Image
                         {
                             Source = bitmap,
@@ -641,6 +641,21 @@ namespace YMM4FileExplorer
             {
                 Debug.WriteLine($"プレビューの読み込みに失敗: {ex.Message}");
             }
+        }
+
+        private static async Task<BitmapImage> LoadImageAsync(string fullPath)
+        {
+            return await Task.Run(() =>
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(fullPath);
+                bitmap.CacheOption = BitmapCacheOption.OnLoad; // メモリにキャッシュ
+                bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                bitmap.EndInit();
+                bitmap.Freeze(); // UIスレッドで安全に使用
+                return bitmap;
+            });
         }
 
         private void Timer_Tick(object? sender, EventArgs e)
