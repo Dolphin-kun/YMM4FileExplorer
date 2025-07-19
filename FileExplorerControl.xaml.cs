@@ -189,9 +189,12 @@ namespace YMM4FileExplorer
             }
         }
 
-        private async Task<StackPanel> CreateTreeViewItemHeaderAsync(string name, string fullPath)
+        private static async Task<StackPanel> CreateTreeViewItemHeaderAsync(
+            string name,
+            string fullPath
+        )
         {
-            var icon = await Task.Run(() => ShellIcon.GetSmallIcon(fullPath, true));
+            var icon = await ShellIcon.GetSmallIconAsync(fullPath, true);
 
             return new StackPanel
             {
@@ -300,7 +303,7 @@ namespace YMM4FileExplorer
                     {
                         var subItem = new TreeViewItem
                         {
-                            Header = CreateTreeViewItemHeader(dir.Name, dir.FullName),
+                            Header = await CreateTreeViewItemHeaderAsync(dir.Name, dir.FullName),
                             Tag = dir.FullName
                         };
 
@@ -337,7 +340,7 @@ namespace YMM4FileExplorer
                     if (Directory.Exists(path))
                     {
                         _currentDirectory = path;
-                        await LoadFiles(path);
+                        await LoadFilesAsync(path);
 
                         _watcher = new FileSystemWatcher(path)
                         {
@@ -364,40 +367,38 @@ namespace YMM4FileExplorer
             }
         }
 
-        private async Task LoadFiles(string path)
+        private async Task LoadFilesAsync(string path)
         {
-            var files = await Task.Run(() =>
+            var fileList = new List<FileItem>();
+            try
             {
-                var fileList = new List<FileItem>();
-                try
+                foreach (var file in Directory.GetFiles(path))
                 {
-                    foreach (var file in Directory.GetFiles(path))
-                    {
-                        var info = new FileInfo(file);
+                    var info = new FileInfo(file);
 
-                        if (
-                            !FileExplorerSettings.Default.ShowHiddenFiles
-                            && info.Attributes.HasFlag(FileAttributes.Hidden)
-                        )
-                            continue;
+                    if (
+                        !FileExplorerSettings.Default.ShowHiddenFiles
+                        && info.Attributes.HasFlag(FileAttributes.Hidden)
+                    )
+                        continue;
 
-                        fileList.Add(
-                            new FileItem
-                            {
-                                Name = info.Name,
-                                Type = info.Extension,
-                                Size = $"{info.Length / 1024} KB",
-                                SizeInBytes = info.Length,
-                                Icon = ShellIcon.GetSmallIcon(file, false),
-                            }
-                        );
-                    }
+                    var icon = await ShellIcon.GetSmallIconAsync(file, false);
+
+                    fileList.Add(
+                        new FileItem
+                        {
+                            Name = info.Name,
+                            Type = info.Extension,
+                            Size = $"{info.Length / 1024} KB",
+                            SizeInBytes = info.Length,
+                            Icon = icon,
+                        }
+                    );
                 }
-                catch { }
-                return fileList;
-            });
+            }
+            catch { }
 
-            FileList.ItemsSource = new ObservableCollection<FileItem>(files);
+            FileList.ItemsSource = new ObservableCollection<FileItem>(fileList);
         }
 
         private async void OnFileSystemChanged(object sender, FileSystemEventArgs e)
@@ -408,7 +409,7 @@ namespace YMM4FileExplorer
                 {
                     if (_currentDirectory != null)
                     {
-                        await LoadFiles(_currentDirectory);
+                        await LoadFilesAsync(_currentDirectory);
                     }
                 });
             }
@@ -418,28 +419,6 @@ namespace YMM4FileExplorer
                     $"ファイルシステムの変更を処理中にエラーが発生しました。: {ex.Message}"
                 );
             }
-        }
-
-        private static StackPanel CreateTreeViewItemHeader(string name, string fullPath)
-        {
-            return new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Children =
-                {
-                    new Image
-                    {
-                        Source = ShellIcon.GetSmallIcon(fullPath, true),
-                        Width=16,
-                        Height=16,
-                        Margin = new Thickness(0,0,4,0)
-                    },
-                    new TextBlock
-                    {
-                        Text = name
-                    }
-                }
-            };
         }
 
         private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -567,7 +546,7 @@ namespace YMM4FileExplorer
         }
 
         //Preview
-        private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        private async void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             _timer.Stop();
             if (PreviewContent.Content is MediaElement oldmedia)
@@ -597,9 +576,10 @@ namespace YMM4FileExplorer
                     case ".jpeg":
                     case ".bmp":
                     case ".gif":
+                        var bitmap = await Task.Run(() => new BitmapImage(new Uri(fullPath)));
                         var image = new Image
                         {
-                            Source = new BitmapImage(new Uri(fullPath)),
+                            Source = bitmap,
                             Stretch = Stretch.Uniform
                         };
                         PreviewContent.Content = image;
