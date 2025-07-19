@@ -59,10 +59,5 @@ namespace YMM4FileExplorer.Helpers
                 DestroyIcon(shinfo.hIcon);
             }
         }
-
-        public static async Task<ImageSource?> GetSmallIconAsync(string path, bool isDirectory)
-        {
-            return await Task.Run(() => GetSmallIcon(path, isDirectory));
-        }
     }
 }

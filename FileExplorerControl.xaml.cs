@@ -1,9 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -16,7 +14,6 @@ using YMM4FileExplorer.Settings;
 
 namespace YMM4FileExplorer
 {
-    [SuppressMessage("Design", "CA1001", Justification = "<保留中>")]
     public partial class FileExplorerControl : UserControl
     {
         public class FileItem
@@ -67,28 +64,9 @@ namespace YMM4FileExplorer
 
         private async void FileExplorerControl_Loaded(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                await InitializeAsync();
-            }
-            catch (Exception ex)
-            {
-                // エラー処理を追加
-                Debug.WriteLine($"初期化中にエラーが発生しました: {ex.Message}");
-                MessageBox.Show(
-                    "初期化中にエラーが発生しました。\n" + ex.Message,
-                    "エラー",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error
-                );
-            }
-        }
-
-        private async Task InitializeAsync()
-        {
             if (_isInitialContentLoaded)
                 return;
-
+            
             _isInitialContentLoaded = true;
 
             var parentWindow = Window.GetWindow(this);
@@ -110,12 +88,12 @@ namespace YMM4FileExplorer
                         parentWindow.Topmost = true;
                     };
                 }
+
             }
 
             if (FileExplorerSettings.Default.IsCheckVersion && await GetVersion.CheckVersionAsync("YMM4エクスプローラー"))
             {
-                string url =
-                    "https://ymm4-info.net/ymme/YMM4%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%97%E3%83%AD%E3%83%BC%E3%83%A9%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3";
+                string url = "https://ymm4-info.net/ymme/YMM4%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%97%E3%83%AD%E3%83%BC%E3%83%A9%E3%83%BC%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3";
                 var result = MessageBox.Show(
                     $"新しいバージョンがあります。\n\n最新バージョンを確認しますか？\nOKを押すと配布サイトが開きます。\n{url}",
                     "YMM4エクスプローラープラグイン",
@@ -136,16 +114,16 @@ namespace YMM4FileExplorer
                 Debug.WriteLine("最新のバージョンです");
             }
 
-            await LoadDrivesAsync();
+            LoadDrives();
 
-            await NavigateToInitialPathAsync(_initialPath);
+            NavigateToInitialPath(_initialPath);
         }
 
-        private async Task NavigateToInitialPathAsync(string path)
+        private void NavigateToInitialPath(string path)
         {
             if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
             {
-                await SelectTreeViewItemByPathAsync(path);
+                SelectTreeViewItemByPath(path);
             }
         }
 
@@ -154,30 +132,23 @@ namespace YMM4FileExplorer
             _watcher?.Dispose();
         }
 
-        private async Task LoadDrivesAsync()
+        private void LoadDrives()
         {
             DirectoryTree.Items.Clear();
 
-            var drives = await Task.Run(() => DriveInfo.GetDrives().Where(d => d.IsReady).ToList());
-
-            foreach (var drive in drives)
+            foreach (var drive in DriveInfo.GetDrives())
             {
+                if (!drive.IsReady) continue;
+
                 var item = new TreeViewItem
                 {
-                    Header = await CreateTreeViewItemHeaderAsync(
-                        drive.Name,
-                        drive.RootDirectory.FullName
-                    ),
+                    Header = CreateTreeViewItemHeader(drive.Name, drive.RootDirectory.FullName),
                     Tag = drive.RootDirectory.FullName
                 };
 
                 try
                 {
-                    bool hasSubDirectories = await Task.Run(
-                        () => Directory.EnumerateDirectories(drive.RootDirectory.FullName).Any()
-                    );
-
-                    if (hasSubDirectories)
+                    if (Directory.EnumerateDirectories(drive.RootDirectory.FullName).Any())
                     {
                         item.Items.Add(null);
                     }
@@ -185,35 +156,12 @@ namespace YMM4FileExplorer
                 catch { }
 
                 item.Expanded += Folder_Expanded;
+
                 DirectoryTree.Items.Add(item);
             }
         }
 
-        private static async Task<StackPanel> CreateTreeViewItemHeaderAsync(
-            string name,
-            string fullPath
-        )
-        {
-            var icon = await ShellIcon.GetSmallIconAsync(fullPath, true);
-
-            return new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Children =
-                {
-                    new Image
-                    {
-                        Source = icon,
-                        Width = 16,
-                        Height = 16,
-                        Margin = new Thickness(0, 0, 4, 0),
-                    },
-                    new TextBlock { Text = name },
-                },
-            };
-        }
-
-        private async Task SelectTreeViewItemByPathAsync(string path)
+        private void SelectTreeViewItemByPath(string path)
         {
             var pathParts = path.Split(Path.DirectorySeparatorChar).ToList();
             if (pathParts.Count > 1 && pathParts[0].EndsWith(':'))
@@ -247,8 +195,8 @@ namespace YMM4FileExplorer
                 if (currentItem != null)
                 {
                     currentItem.IsExpanded = true;
-
-                    await ExpandNodeAsync(currentItem);
+                    
+                    ExpandNode(currentItem);
 
                     parent = currentItem;
                     finalItem = currentItem;
@@ -265,22 +213,15 @@ namespace YMM4FileExplorer
             }
         }
 
-        private async void Folder_Expanded(object sender, RoutedEventArgs e)
+        private void Folder_Expanded(object sender, RoutedEventArgs e)
         {
-            try
+            if (sender is TreeViewItem item)
             {
-                if (sender is TreeViewItem item)
-                {
-                    await ExpandNodeAsync(item);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"フォルダー展開中にエラーが発生しました: {ex.Message}");
+                ExpandNode(item);
             }
         }
 
-        private async Task ExpandNodeAsync(TreeViewItem item)
+        private void ExpandNode(TreeViewItem item)
         {
             if (item.Items.Count == 1 && item.Items[0] == null)
             {
@@ -288,32 +229,20 @@ namespace YMM4FileExplorer
                 try
                 {
                     var parentDirInfo = new DirectoryInfo((string)item.Tag);
-                    var directories = await Task.Run(
-                        () =>
-                            parentDirInfo
-                                .GetDirectories()
-                                .Where(dir =>
-                                    FileExplorerSettings.Default.ShowHiddenFiles
-                                    || !dir.Attributes.HasFlag(FileAttributes.Hidden)
-                                )
-                                .ToList()
-                    );
-
-                    foreach (var dir in directories)
+                    foreach (var dir in parentDirInfo.GetDirectories())
                     {
+                        if (!FileExplorerSettings.Default.ShowHiddenFiles && dir.Attributes.HasFlag(FileAttributes.Hidden))
+                            continue;
+
                         var subItem = new TreeViewItem
                         {
-                            Header = await CreateTreeViewItemHeaderAsync(dir.Name, dir.FullName),
+                            Header = CreateTreeViewItemHeader(dir.Name, dir.FullName),
                             Tag = dir.FullName
                         };
 
                         try
                         {
-                            bool hasSubDirs = await Task.Run(
-                                () => Directory.EnumerateDirectories(dir.FullName).Any()
-                            );
-
-                            if (hasSubDirs)
+                            if (Directory.EnumerateDirectories(dir.FullName).Any())
                             {
                                 subItem.Items.Add(null);
                             }
@@ -329,96 +258,90 @@ namespace YMM4FileExplorer
         }
 
 
-        private async void DirectoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        private void DirectoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            try
+            _watcher?.Dispose();
+            if (DirectoryTree.SelectedItem is TreeViewItem item)
             {
-                _watcher?.Dispose();
-                if (DirectoryTree.SelectedItem is TreeViewItem item)
+                string? path = item.Tag as string;
+                if (Directory.Exists(path))
                 {
-                    string? path = item.Tag as string;
-                    if (Directory.Exists(path))
+                    _currentDirectory = path;
+                    LoadFiles(path);
+
+                    _watcher = new FileSystemWatcher(path)
                     {
-                        _currentDirectory = path;
-                        await LoadFilesAsync(path);
+                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
+                        EnableRaisingEvents = true
+                    };
 
-                        _watcher = new FileSystemWatcher(path)
-                        {
-                            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
-                            EnableRaisingEvents = true,
-                        };
+                    _watcher.Created += OnFileSystemChanged;
+                    _watcher.Deleted += OnFileSystemChanged;
+                    _watcher.Renamed += OnFileSystemChanged;
 
-                        _watcher.Created += OnFileSystemChanged;
-                        _watcher.Deleted += OnFileSystemChanged;
-                        _watcher.Renamed += OnFileSystemChanged;
-
-                        PathChanged?.Invoke(path);
-                    }
+                    PathChanged?.Invoke(path);
                 }
-            }
-            catch (System.Exception ex)
-            {
-                MessageBox.Show(
-                    $"選択したディレクトリが存在しないか、アクセスできません。\n{ex.Message}",
-                    "エラー",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error
-                );
             }
         }
 
-        private async Task LoadFilesAsync(string path)
+        private void LoadFiles(string path)
         {
-            var fileList = new List<FileItem>();
+            var files = new ObservableCollection<FileItem>();
             try
             {
                 foreach (var file in Directory.GetFiles(path))
                 {
                     var info = new FileInfo(file);
 
-                    if (
-                        !FileExplorerSettings.Default.ShowHiddenFiles
-                        && info.Attributes.HasFlag(FileAttributes.Hidden)
-                    )
+                    if (!FileExplorerSettings.Default.ShowHiddenFiles && info.Attributes.HasFlag(FileAttributes.Hidden))
                         continue;
 
-                    var icon = await ShellIcon.GetSmallIconAsync(file, false);
-
-                    fileList.Add(
-                        new FileItem
-                        {
-                            Name = info.Name,
-                            Type = info.Extension,
-                            Size = $"{info.Length / 1024} KB",
-                            SizeInBytes = info.Length,
-                            Icon = icon,
-                        }
-                    );
+                    files.Add(new FileItem
+                    {
+                        Name = info.Name,
+                        Type = info.Extension,
+                        Size = $"{info.Length / 1024} KB",
+                        SizeInBytes = info.Length,
+                        Icon = ShellIcon.GetSmallIcon(file, false)
+                    });
                 }
             }
             catch { }
 
-            FileList.ItemsSource = new ObservableCollection<FileItem>(fileList);
+            FileList.ItemsSource = files;
         }
 
-        private async void OnFileSystemChanged(object sender, FileSystemEventArgs e)
+        private void OnFileSystemChanged(object sender, FileSystemEventArgs e)
         {
-            try
+            Dispatcher.Invoke(() =>
             {
-                await Dispatcher.InvokeAsync(async () =>
+                if (_currentDirectory != null)
                 {
-                    if (_currentDirectory != null)
-                    {
-                        await LoadFilesAsync(_currentDirectory);
-                    }
-                });
-            }
-            catch (System.Exception ex)
+                    LoadFiles(_currentDirectory);
+                }
+            });
+        }
+
+        private static StackPanel CreateTreeViewItemHeader(string name, string fullPath)
+        {
+            return new StackPanel
             {
-                Debug.WriteLine(
-                    $"ファイルシステムの変更を処理中にエラーが発生しました。: {ex.Message}"
-                );
-            }
+                Orientation = Orientation.Horizontal,
+                Children =
+                {
+                    new Image
+                    {
+                        Source = ShellIcon.GetSmallIcon(fullPath, true),
+                        Width=16,
+                        Height=16,
+                        Margin = new Thickness(0,0,4,0)
+                    },
+                    new TextBlock
+                    {
+                        Text = name
+                    }
+                }
+            };
         }
 
         private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -546,7 +469,7 @@ namespace YMM4FileExplorer
         }
 
         //Preview
-        private async void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             _timer.Stop();
             if (PreviewContent.Content is MediaElement oldmedia)
@@ -576,10 +499,9 @@ namespace YMM4FileExplorer
                     case ".jpeg":
                     case ".bmp":
                     case ".gif":
-                        var bitmap = await LoadImageAsync(fullPath);
                         var image = new Image
                         {
-                            Source = bitmap,
+                            Source = new BitmapImage(new Uri(fullPath)),
                             Stretch = Stretch.Uniform
                         };
                         PreviewContent.Content = image;
@@ -643,21 +565,6 @@ namespace YMM4FileExplorer
             }
         }
 
-        private static async Task<BitmapImage> LoadImageAsync(string fullPath)
-        {
-            return await Task.Run(() =>
-            {
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri(fullPath);
-                bitmap.CacheOption = BitmapCacheOption.OnLoad; // メモリにキャッシュ
-                bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-                bitmap.EndInit();
-                bitmap.Freeze(); // UIスレッドで安全に使用
-                return bitmap;
-            });
-        }
-
         private void Timer_Tick(object? sender, EventArgs e)
         {
             if (PreviewContent.Content is Grid grid &&
@@ -679,11 +586,9 @@ namespace YMM4FileExplorer
             {
                 media.Close();
             }
-            else if (
-                PreviewContent.Content is Grid grid
-                && grid.Children.Count == 2
-                && grid.Children[1] is MediaElement audioMedia
-            )
+            else if(PreviewContent.Content is Grid grid &&
+             grid.Children.Count == 2 &&
+             grid.Children[1] is MediaElement audioMedia)
             {
                 audioMedia.Close();
             }
@@ -695,10 +600,10 @@ namespace YMM4FileExplorer
         {
             if (!PreviewPopup.IsOpen)
                 return;
-
+           
             if (PreviewPopup.Child != null && PreviewPopup.Child.IsMouseOver)
                 return;
-
+            
             PreviewPopup.IsOpen = false;
         }
 
