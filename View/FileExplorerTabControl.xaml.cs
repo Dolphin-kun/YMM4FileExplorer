@@ -139,15 +139,26 @@ namespace YMM4FileExplorer
             }
         }
 
-        private void RenameTab_Click(object sender, RoutedEventArgs e)
+        private async void RenameTab_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is MenuItem menuItem && menuItem.DataContext is FileExplorerTabControlViewModel tab)
+            try
             {
-                string newName = ShowInputDialog(tab.Header);
-                if (!string.IsNullOrEmpty(newName) && newName != tab.Header)
+                if (
+                    sender is MenuItem menuItem
+                    && menuItem.DataContext is FileExplorerTabControlViewModel tab
+                )
                 {
-                    tab.Header = newName;
+                    string newName = ShowInputDialog(tab.Header);
+                    if (!string.IsNullOrEmpty(newName) && newName != tab.Header)
+                    {
+                        tab.Header = newName;
+                        await SaveTabsStateAsync();
+                    }
                 }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.WriteLine($"タブ名変更中にエラーが発生しました: {ex.Message}");
             }
         }
 
