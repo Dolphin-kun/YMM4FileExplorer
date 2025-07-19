@@ -16,7 +16,8 @@ YMM4の中でエクスプローラーを開くことができるプラグイン�
 今後のプラグインにもつけるかどうかはまだ未定です。
 
 ## 見た目
-<img width="874" height="488" alt="image" src="https://github.com/user-attachments/assets/c087c2df-4aa4-4128-9bb8-b9198657d04b" />
+<img width="937" height="574" alt="image" src="https://github.com/user-attachments/assets/46314fa8-28ee-4b5e-98aa-4eb51f16fa5e" />
+
 
 ## できること
 ### 設定
