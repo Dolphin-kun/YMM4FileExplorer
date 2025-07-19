@@ -607,6 +607,7 @@ namespace YMM4FileExplorer
                         var audioMedia = new MediaElement
                         {
                             Source = new Uri(fullPath),
+                            Volume = FileExplorerSettings.Default.PreviewVolume,
                             LoadedBehavior = MediaState.Manual,
                             UnloadedBehavior = MediaState.Manual
                         };
