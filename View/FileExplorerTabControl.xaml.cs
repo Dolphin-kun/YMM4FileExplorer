@@ -1,4 +1,7 @@
 ﻿using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -28,14 +31,28 @@ namespace YMM4FileExplorer
 
         #region 状態の保存と復元
 
-        private async async FileExplorerTabControl_Loaded(object sender, RoutedEventArgs e)
+        private async void FileExplorerTabControl_Loaded(object sender, RoutedEventArgs e)
         {
-            await LoadTabsStateAsync();
+            try
+            {
+                await LoadTabsStateAsync();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.WriteLine(ex.Message);
+            }
         }
 
         private async void FileExplorerTabControl_Unloaded(object sender, RoutedEventArgs e)
         {
-            await SaveTabsStateAsync();
+            try
+            {
+                await SaveTabsStateAsync();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.WriteLine(ex.Message);
+            }
         }
 
         private async Task LoadTabsStateAsync()
@@ -49,8 +66,9 @@ namespace YMM4FileExplorer
 
             try
             {
+                using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
                 var savedTabs = await JsonSerializer.DeserializeAsync<List<TabState>>(
-                    json,
+                    stream,
                     _jsonOptions
                 );
                 if (savedTabs == null || savedTabs.Count == 0)
@@ -86,7 +104,9 @@ namespace YMM4FileExplorer
                 })
                 .ToList();
 
-            string json = await JsonSerializer.SerializeAsync(tabsToSave, _jsonOptions);
+            using var stream = new MemoryStream();
+            await JsonSerializer.SerializeAsync(stream, tabsToSave, _jsonOptions);
+            string json = Encoding.UTF8.GetString(stream.ToArray());
             FileExplorerSettings.Default.SavedTabsJson = json;
         }
 
@@ -99,12 +119,23 @@ namespace YMM4FileExplorer
             AddNewTab($"新しいタブ {Tabs.Count + 1}", "C:\\");
         }
 
-        private void CloseTab_Click(object sender, RoutedEventArgs e)
+        private async void CloseTab_Click(object sender, RoutedEventArgs e)
         {
-            if (Tabs.Count > 1 && sender is FrameworkElement element && element.DataContext is FileExplorerTabControlViewModel tab)
+            try
             {
-                Tabs.Remove(tab);
-                SaveTabsState();
+                if (
+                    Tabs.Count > 1
+                    && sender is FrameworkElement element
+                    && element.DataContext is FileExplorerTabControlViewModel tab
+                )
+                {
+                    Tabs.Remove(tab);
+                    await SaveTabsStateAsync();
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.WriteLine($"タブ削除中にエラーが発生しました: {ex.Message}");
             }
         }
 
@@ -136,10 +167,10 @@ namespace YMM4FileExplorer
             var tabContent = new FileExplorerControl(path);
             var newTabViewModel = new FileExplorerTabControlViewModel(header, path, tabContent, id);
 
-            tabContent.PathChanged += (newPath) =>
+            tabContent.PathChanged += async (newPath) =>
             {
                 newTabViewModel.Path = newPath;
-                SaveTabsState();
+                await SaveTabsStateAsync();
             };
 
             Tabs.Add(newTabViewModel);
@@ -154,7 +185,7 @@ namespace YMM4FileExplorer
             };
 
             if (dialog.ShowDialog() == true)
-                return dialog.ResponseText;
+                return dialog.ResponseText ?? "";
             return defaultValue;
         }
 
