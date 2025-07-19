@@ -33,52 +33,71 @@ namespace YMM4FileExplorer
             LoadTabsState();
         }
 
-        private void FileExplorerTabControl_Unloaded(object sender, RoutedEventArgs e)
+        private async void FileExplorerTabControl_Unloaded(object sender, RoutedEventArgs e)
         {
-            SaveTabsState();
+            await SaveTabsStateAsync();
         }
 
-        private void LoadTabsState()
+        private async void LoadTabsState()
         {
-            var json = FileExplorerSettings.Default.SavedTabsJson;
-            if (string.IsNullOrEmpty(json))
-            {
-                AddNewTab("新しいタブ", "C:\\");
-                return;
-            }
-
-            try
-            {
-                var savedTabs = JsonSerializer.Deserialize<List<TabState>>(json, _jsonOptions);
-                if (savedTabs == null || savedTabs.Count == 0)
-                {
-                    throw new InvalidOperationException("Failed to deserialize or list is empty.");
-                }
-
-                foreach (var tabState in savedTabs)
-                {
-                    AddNewTab(tabState.Header, tabState.Path, tabState.Id);
-                }
-            }
-            catch
-            {
-                Tabs.Clear();
-                AddNewTab("新しいタブ (復元失敗)", "C:\\");
-            }
+            await LoadTabsStateAsync();
         }
 
-        private void SaveTabsState()
+        private async Task LoadTabsStateAsync()
         {
-            var tabsToSave = Tabs.Select(vm => new TabState
+            await Task.Run(() =>
             {
-                Id = vm.Id,
-                Header = vm.Header,
-                Path = vm.Path
-            }).ToList();
+                var json = FileExplorerSettings.Default.SavedTabsJson;
+                if (string.IsNullOrEmpty(json))
+                {
+                    Dispatcher.Invoke(() => AddNewTab("新しいタブ", "C:\\"));
+                    return;
+                }
 
-            string json = JsonSerializer.Serialize(tabsToSave, _jsonOptions);
+                try
+                {
+                    var savedTabs = JsonSerializer.Deserialize<List<TabState>>(json, _jsonOptions);
+                    if (savedTabs == null || savedTabs.Count == 0)
+                    {
+                        throw new InvalidOperationException(
+                            "Failed to deserialize or list is empty."
+                        );
+                    }
 
-            FileExplorerSettings.Default.SavedTabsJson = json;
+                    Dispatcher.Invoke(() =>
+                    {
+                        foreach (var tabState in savedTabs)
+                        {
+                            AddNewTab(tabState.Header, tabState.Path, tabState.Id);
+                        }
+                    });
+                }
+                catch
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        Tabs.Clear();
+                        AddNewTab("新しいタブ (復元失敗)", "C:\\");
+                    });
+                }
+            });
+        }
+
+        private async Task SaveTabsStateAsync()
+        {
+            await Task.Run(() =>
+            {
+                var tabsToSave = Tabs.Select(vm => new TabState
+                    {
+                        Id = vm.Id,
+                        Header = vm.Header,
+                        Path = vm.Path,
+                    })
+                    .ToList();
+
+                string json = JsonSerializer.Serialize(tabsToSave, _jsonOptions);
+                FileExplorerSettings.Default.SavedTabsJson = json;
+            });
         }
 
         #endregion
