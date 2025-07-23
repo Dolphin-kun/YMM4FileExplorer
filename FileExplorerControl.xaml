@@ -8,7 +8,7 @@
              xmlns:c="clr-namespace:YukkuriMovieMaker.Controls;assembly=YukkuriMovieMaker.Controls"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
-    
+
     <UserControl.Resources>
         <Style x:Key="GridViewColumnHeaderGripper"
             TargetType="Thumb">
@@ -26,19 +26,30 @@
             </Setter>
         </Style>
     </UserControl.Resources>
-    
+
     <Grid PreviewMouseLeftButtonDown="Grid_PreviewMouseLeftButtonDown">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="250"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        
+        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,5,5,5" VerticalAlignment="Center">
+            <TextBox x:Name="SearchTextBox" Width="200" VerticalAlignment="Center" Margin="0,0,5,0" KeyDown="SearchTextBox_KeyDown" />
+            <Button x:Name="SearchButton" Content="検索" Click="SearchButton_Click" />
+            <CheckBox x:Name="SearchSubdirectoriesCheckBox" Content="サブフォルダも検索" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="True" />
+        </StackPanel>
+
         <TreeView Name="DirectoryTree"
+                  Grid.Row="1"
                   SelectedItemChanged="DirectoryTree_SelectedItemChanged"/>
 
 
         <ListView Name="FileList" 
+                  Grid.Row="1"
                   Grid.Column="1"
                   SelectionMode="Extended"
                   PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
@@ -74,7 +85,7 @@
                     </Style.Triggers>
                 </Style>
             </ListView.ItemContainerStyle>
-            
+
             <ListView.View>
                 <GridView>
                     <GridView.ColumnHeaderContainerStyle>
@@ -116,7 +127,7 @@
                                 </StackPanel>
                             </GridViewColumnHeader>
                         </GridViewColumn.Header>
-                        
+
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
@@ -136,7 +147,7 @@
                                 </StackPanel>
                             </GridViewColumnHeader>
                         </GridViewColumn.Header>
-                        
+
                         <GridViewColumn.DisplayMemberBinding>
                             <Binding Path="Type"/>
                         </GridViewColumn.DisplayMemberBinding>
@@ -153,6 +164,20 @@
                         </GridViewColumn.Header>
                         <GridViewColumn.DisplayMemberBinding>
                             <Binding Path="Size"/>
+                        </GridViewColumn.DisplayMemberBinding>
+                    </GridViewColumn>
+
+                    <GridViewColumn Width="150">
+                        <GridViewColumn.Header>
+                            <GridViewColumnHeader Tag="LastWriteTime" Click="GridViewColumnHeader_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="更新日時"/>
+                                    <TextBlock Text="" Foreground="Gray" Margin="4,0,0,0"/>
+                                </StackPanel>
+                            </GridViewColumnHeader>
+                        </GridViewColumn.Header>
+                        <GridViewColumn.DisplayMemberBinding>
+                            <Binding Path="LastWriteString"/>
                         </GridViewColumn.DisplayMemberBinding>
                     </GridViewColumn>
                 </GridView>

@@ -12,7 +12,7 @@ namespace YMM4FileExplorer.ViewModel
             get => _header;
             set
             {
-                if(_header != value)
+                if (_header != value)
                 {
                     _header = value;
                     OnPropertyChanged();

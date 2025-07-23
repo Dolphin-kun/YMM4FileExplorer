@@ -3,7 +3,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -22,10 +21,15 @@ namespace YMM4FileExplorer
         public class FileItem
         {
             public string? Name { get; set; }
+            public string? FullPath { get; set; }
             public string? Type { get; set; }
             public string? Size { get; set; }
             public long SizeInBytes { get; set; }
+            public string? LastWriteString { get; set; }
+            public DateTime LastWriteTime { get; set; }
             public ImageSource? Icon { get; set; }
+
+            public bool IsDirectory { get; set; }
         }
 
         //watcher
@@ -339,6 +343,8 @@ namespace YMM4FileExplorer
                     string? path = item.Tag as string;
                     if (Directory.Exists(path))
                     {
+                        SearchTextBox.Text = string.Empty;
+
                         _currentDirectory = path;
                         await LoadFilesAsync(path);
 
@@ -369,36 +375,75 @@ namespace YMM4FileExplorer
 
         private async Task LoadFilesAsync(string path)
         {
-            var fileList = new List<FileItem>();
+            var fileCollection = new ObservableCollection<FileItem>();
+            FileList.ItemsSource = fileCollection;
             try
             {
-                foreach (var file in Directory.GetFiles(path))
+                await Task.Run(async () =>
                 {
-                    var info = new FileInfo(file);
+                    //ディレクトリ
+                    foreach (var dir in Directory.EnumerateDirectories(path))
+                    {
+                        var info = new DirectoryInfo(dir);
 
-                    if (
-                        !FileExplorerSettings.Default.ShowHiddenFiles
-                        && info.Attributes.HasFlag(FileAttributes.Hidden)
-                    )
-                        continue;
+                        if (
+                            !FileExplorerSettings.Default.ShowHiddenFiles
+                            && info.Attributes.HasFlag(FileAttributes.Hidden)
+                        )
+                            continue;
 
-                    var icon = await ShellIcon.GetSmallIconAsync(file, false);
-
-                    fileList.Add(
-                        new FileItem
+                        var icon = await ShellIcon.GetSmallIconAsync(dir, true);
+                        var fileItem = new FileItem
                         {
                             Name = info.Name,
+                            FullPath = info.FullName,
+                            Type = "フォルダー",
+                            LastWriteString = info.LastWriteTime.ToString("yyyy/MM/dd HH:mm"),
+                            LastWriteTime = info.LastWriteTime,
+                            Icon = icon,
+                            IsDirectory = true,
+                        };
+
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            fileCollection.Add(fileItem);
+                        });
+                    }
+
+                    //ファイル
+                    foreach (var file in Directory.EnumerateFiles(path))
+                    {
+                        var info = new FileInfo(file);
+
+                        if (!FileExplorerSettings.Default.ShowHiddenFiles && info.Attributes.HasFlag(FileAttributes.Hidden))
+                            continue;
+
+                        var icon = await ShellIcon.GetSmallIconAsync(file, false);
+                        var fileItem = new FileItem
+                        {
+                            Name = info.Name,
+                            FullPath = info.FullName,
                             Type = info.Extension,
                             Size = $"{info.Length / 1024} KB",
                             SizeInBytes = info.Length,
+                            LastWriteString = info.LastWriteTime.ToString("yyyy/MM/dd HH:mm"),
+                            LastWriteTime = info.LastWriteTime,
                             Icon = icon,
-                        }
-                    );
-                }
-            }
-            catch { }
+                            IsDirectory = false,
+                        };
 
-            FileList.ItemsSource = new ObservableCollection<FileItem>(fileList);
+                        await Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            fileCollection.Add(fileItem);
+                        });
+                    }
+                });
+
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ファイルの読み込みに失敗: {ex.Message}");
+            }
         }
 
         private async void OnFileSystemChanged(object sender, FileSystemEventArgs e)
@@ -462,9 +507,9 @@ namespace YMM4FileExplorer
                         var filePaths = new List<string>();
                         foreach (var item in selectedItems)
                         {
-                            if (item is FileItem file && !string.IsNullOrEmpty(file.Name))
+                            if (item is FileItem file && !string.IsNullOrEmpty(file.FullPath))
                             {
-                                string fullPath = Path.Combine(_currentDirectory, file.Name);
+                                string fullPath = file.FullPath;
                                 filePaths.Add(fullPath);
                             }
                         }
@@ -545,103 +590,112 @@ namespace YMM4FileExplorer
             }
         }
 
-        //Preview
+        #region プレビュー
         private async void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            _timer.Stop();
-            if (PreviewContent.Content is MediaElement oldmedia)
-            {
-                oldmedia.Close();
-            }
-            else if (PreviewContent.Content is Grid grid &&
-                     grid.Children.Count > 1 &&
-                     grid.Children[1] is MediaElement audioMedia)
-            {
-                audioMedia.Close();
-            }
-            PreviewContent.Content = null;
-
-            if (FileList.SelectedItem is not FileItem selectedFile || _currentDirectory is null || string.IsNullOrEmpty(selectedFile.Name))
+            if (FileList.SelectedItem is not FileItem selectedItem || string.IsNullOrEmpty(selectedItem.FullPath))
                 return;
 
-            var fullPath = Path.Combine(_currentDirectory, selectedFile.Name);
-            var extension = Path.GetExtension(fullPath).ToLowerInvariant();
-
-            try
+            if (selectedItem.IsDirectory)
             {
-                switch (extension)
+                await SelectTreeViewItemByPathAsync(selectedItem.FullPath);
+            }
+            else
+            {
+                _timer.Stop();
+                if (PreviewContent.Content is MediaElement oldmedia)
                 {
-                    case ".png":
-                    case ".jpg":
-                    case ".jpeg":
-                    case ".bmp":
-                    case ".gif":
-                        var bitmap = await LoadImageAsync(fullPath);
-                        var image = new Image
-                        {
-                            Source = bitmap,
-                            Stretch = Stretch.Uniform
-                        };
-                        PreviewContent.Content = image;
-                        break;
-
-                    case ".mp4":
-                    case ".wmv":
-                    case ".avi":
-                    case ".mov":
-                        var media = new MediaElement
-                        {
-                            Source = new Uri(fullPath),
-                            Volume = FileExplorerSettings.Default.PreviewVolume,
-                            Stretch = Stretch.Uniform,
-                            LoadedBehavior = MediaState.Manual,
-                            UnloadedBehavior = MediaState.Manual
-                        };
-                        PreviewContent.Content = media;
-                        media.Play();
-                        break;
-
-                    case ".mp3":
-                    case ".wav":
-                        var slider = new Slider { VerticalAlignment = VerticalAlignment.Center };
-                        var audioMedia = new MediaElement
-                        {
-                            Source = new Uri(fullPath),
-                            Volume = FileExplorerSettings.Default.PreviewVolume,
-                            LoadedBehavior = MediaState.Manual,
-                            UnloadedBehavior = MediaState.Manual
-                        };
-
-                        audioMedia.MediaOpened += (s, args) =>
-                        {
-                            if (audioMedia.NaturalDuration.HasTimeSpan)
-                            {
-                                slider.Maximum = audioMedia.NaturalDuration.TimeSpan.TotalSeconds;
-                            }
-                        };
-
-                        slider.PreviewMouseDown += Slider_PreviewMouseDown;
-                        slider.PreviewMouseUp += Slider_PreviewMouseUp;
-
-                        var grid = new Grid();
-                        grid.Children.Add(slider);
-                        grid.Children.Add(audioMedia);
-
-                        PreviewContent.Content = grid;
-                        audioMedia.Play();
-                        _timer.Start();
-                        break;
-
-                    default:
-                        return;
+                    oldmedia.Close();
                 }
+                else if (PreviewContent.Content is Grid grid &&
+                         grid.Children.Count > 1 &&
+                         grid.Children[1] is MediaElement audioMedia)
+                {
+                    audioMedia.Close();
+                }
+                PreviewContent.Content = null;
 
-                PreviewPopup.IsOpen = true;
+                var fullPath = selectedItem.FullPath;
+                var extension = Path.GetExtension(fullPath).ToLowerInvariant();
+
+                try
+                {
+                    switch (extension)
+                    {
+                        case ".png":
+                        case ".jpg":
+                        case ".jpeg":
+                        case ".bmp":
+                        case ".gif":
+                            var bitmap = await LoadImageAsync(fullPath);
+                            var image = new Image
+                            {
+                                Source = bitmap,
+                                Stretch = Stretch.Uniform
+                            };
+                            PreviewContent.Content = image;
+                            break;
+
+                        case ".mp4":
+                        case ".wmv":
+                        case ".avi":
+                        case ".mov":
+                            var media = new MediaElement
+                            {
+                                Source = new Uri(fullPath),
+                                Volume = FileExplorerSettings.Default.PreviewVolume,
+                                Stretch = Stretch.Uniform,
+                                LoadedBehavior = MediaState.Manual,
+                                UnloadedBehavior = MediaState.Manual
+                            };
+                            PreviewContent.Content = media;
+                            media.Play();
+                            break;
+
+                        case ".mp3":
+                        case ".wav":
+                            var slider = new Slider { VerticalAlignment = VerticalAlignment.Center };
+                            var audioMedia = new MediaElement
+                            {
+                                Source = new Uri(fullPath),
+                                Volume = FileExplorerSettings.Default.PreviewVolume,
+                                LoadedBehavior = MediaState.Manual,
+                                UnloadedBehavior = MediaState.Manual
+                            };
+
+                            audioMedia.MediaOpened += (s, args) =>
+                            {
+                                if (audioMedia.NaturalDuration.HasTimeSpan)
+                                {
+                                    slider.Maximum = audioMedia.NaturalDuration.TimeSpan.TotalSeconds;
+                                }
+                            };
+
+                            slider.PreviewMouseDown += Slider_PreviewMouseDown;
+                            slider.PreviewMouseUp += Slider_PreviewMouseUp;
+
+                            var grid = new Grid();
+                            grid.Children.Add(slider);
+                            grid.Children.Add(audioMedia);
+
+                            PreviewContent.Content = grid;
+                            audioMedia.Play();
+                            _timer.Start();
+                            break;
+
+                        default:
+                            return;
+                    }
+
+                    PreviewPopup.IsOpen = true;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"プレビューの読み込みに失敗: {ex.Message}");
+                }
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"プレビューの読み込みに失敗: {ex.Message}");
-            }
+
+
         }
 
         private static async Task<BitmapImage> LoadImageAsync(string fullPath)
@@ -719,5 +773,140 @@ namespace YMM4FileExplorer
                 _timer.Start();
             }
         }
+        #endregion
+
+        #region 検索ロジック
+
+        private async void SearchButton_Click(object sender, RoutedEventArgs e)
+        {
+            string searchTerm = SearchTextBox.Text;
+            bool searchSubdirectories = SearchSubdirectoriesCheckBox.IsChecked == true;
+
+            if (string.IsNullOrWhiteSpace(searchTerm))
+            {
+                if (!string.IsNullOrEmpty(_currentDirectory))
+                {
+                    await LoadFilesAsync(_currentDirectory);
+                }
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_currentDirectory))
+            {
+                MessageBox.Show("検索対象のフォルダを選択してください。", "情報", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            await SearchFilesAsync(_currentDirectory, searchTerm, searchSubdirectories);
+        }
+
+        private void SearchTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                SearchButton_Click(sender, e);
+            }
+        }
+
+        private async Task SearchFilesAsync(string path, string searchTerm, bool searchSubdirectories)
+        {
+            this.Cursor = Cursors.Wait;
+            var fileCollection = new ObservableCollection<FileItem>();
+            FileList.ItemsSource = fileCollection;
+
+            try
+            {
+                await Task.Run(async () =>
+                {
+                    if (searchSubdirectories)
+                    {
+                        await SearchRecursivelyAsync(path, searchTerm, fileCollection);
+                    }
+                    else
+                    {
+                        foreach (var file in Directory.EnumerateFiles(path, $"*{searchTerm}*"))
+                        {
+                            var info = new FileInfo(file);
+                            if (!FileExplorerSettings.Default.ShowHiddenFiles && info.Attributes.HasFlag(FileAttributes.Hidden))
+                                continue;
+
+                            var icon = await ShellIcon.GetSmallIconAsync(file, false);
+                            var fileItem = new FileItem
+                            {
+                                Name = info.Name,
+                                FullPath = info.FullName,
+                                Type = info.Extension,
+                                Size = $"{info.Length / 1024} KB",
+                                SizeInBytes = info.Length,
+                                LastWriteString = info.LastWriteTime.ToString("yyyy/MM/dd HH:mm"),
+                                LastWriteTime = info.LastWriteTime,
+                                Icon = icon,
+                            };
+
+                            await Application.Current.Dispatcher.InvokeAsync(() =>
+                            {
+                                fileCollection.Add(fileItem);
+                            });
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"検索中に予期せぬエラーが発生しました。\n{ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                this.Cursor = Cursors.Arrow;
+            }
+        }
+
+        private static async Task SearchRecursivelyAsync(string directory, string searchTerm, ObservableCollection<FileItem> collection)
+        {
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(directory, $"*{searchTerm}*"))
+                {
+                    var info = new FileInfo(file);
+                    if (!FileExplorerSettings.Default.ShowHiddenFiles && info.Attributes.HasFlag(FileAttributes.Hidden))
+                        continue;
+
+                    var icon = await ShellIcon.GetSmallIconAsync(file, false);
+                    var fileItem = new FileItem
+                    {
+                        Name = info.Name,
+                        FullPath = info.FullName,
+                        Type = info.Extension,
+                        Size = $"{info.Length / 1024} KB",
+                        SizeInBytes = info.Length,
+                        LastWriteString = info.LastWriteTime.ToString("yyyy/MM/dd HH:mm"),
+                        LastWriteTime = info.LastWriteTime,
+                        Icon = icon,
+                    };
+
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        collection.Add(fileItem);
+                    });
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;
+            }
+
+            try
+            {
+                foreach (var subDirectory in Directory.EnumerateDirectories(directory))
+                {
+                    await SearchRecursivelyAsync(subDirectory, searchTerm, collection);
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        #endregion
     }
 }

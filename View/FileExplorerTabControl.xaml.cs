@@ -97,11 +97,11 @@ namespace YMM4FileExplorer
         private async Task SaveTabsStateAsync()
         {
             var tabsToSave = Tabs.Select(vm => new TabState
-                {
-                    Id = vm.Id,
-                    Header = vm.Header,
-                    Path = vm.Path,
-                })
+            {
+                Id = vm.Id,
+                Header = vm.Header,
+                Path = vm.Path,
+            })
                 .ToList();
 
             using var stream = new MemoryStream();

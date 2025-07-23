@@ -16,7 +16,7 @@
 
         <TextBox x:Name="ResponseTextBox" Grid.Row="0"
                  VerticalContentAlignment="Center"/>
-        
+
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="閉じる" Width="75" Height="25" IsDefault="True" Click="CloseButton_Click"/>
         </StackPanel>
