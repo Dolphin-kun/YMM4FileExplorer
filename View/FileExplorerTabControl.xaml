@@ -71,10 +71,16 @@
             <TabControl.Resources>
                 <DataTemplate x:Key="TabHeaderTemplate">
                     <DockPanel>
-                        <Button Content="X" DockPanel.Dock="Right"
-                                Click="CloseTab_Click" 
-                                FontFamily="Meiryo" FontSize="10" Padding="2,2,2,0" Margin="2,0,-2,0" 
-                                BorderThickness="0" Background="Transparent" VerticalAlignment="Center"/>
+                        <Button DockPanel.Dock="Right"
+                                Click="CloseTab_Click"
+                                BorderThickness="0"
+                                Background="Transparent"
+                                Width="16" Height="16" Padding="4">
+                            <Path Data="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41 L10.59,12L5,17.59L6.41,19L12,13.41 L17.59,19L19,17.59L13.41,12L19,6.41Z"
+                                  Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  Stretch="Uniform"/>
+                        </Button>
+
                         <Button Content="︙" DockPanel.Dock="Left"
                                 FontFamily="Meiryo UI" Margin="-3,0,0,0" 
                                 BorderThickness="0" Background="Transparent" VerticalAlignment="Center"

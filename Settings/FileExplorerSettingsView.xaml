@@ -13,8 +13,7 @@
         <local:PercentageConverter  x:Key="PercentageConverter"/>
     </UserControl.Resources>
 
-    <StackPanel Focusable="True"
-                PreviewMouseLeftButtonDown="ParentPanel_PreviewMouseLeftButtonDown">
+    <StackPanel Focusable="True">
 
         <Expander Header="プラグイン設定" IsExpanded="True">
             <Border BorderBrush="{DynamicResource {x:Static theme:YMM4Colors.IconBrushKey}}" BorderThickness="0.5" Margin="5" Padding="5" CornerRadius="4">
@@ -47,44 +46,34 @@
                 </Grid>
             </StackPanel>
         </Expander>
-        
+
         <Expander Header="プレビュー" IsExpanded="True">
             <StackPanel>
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="60"/>
-                        <ColumnDefinition Width="10"/>
-                        <ColumnDefinition Width="150"/>
-                    </Grid.ColumnDefinitions>
-
                     <Label Content="プレビューの音量" VerticalAlignment="Center" Grid.Column="0"/>
-
-                    <TextBox 
-                        Text="{Binding Source={x:Static local:FileExplorerSettings.Default}, Path=PreviewVolume, Converter={StaticResource PercentageConverter}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        HorizontalContentAlignment="Right"
-                        Margin="0,0,0,0"
-                        Width="50"
-                        Background="Transparent"
-                        BorderBrush="Transparent"/>
-                    <TextBlock
-                        Text="%"
-                        Grid.Column="2"
-                        VerticalAlignment="Center"
-                        Width="10"/>
-
-                    <Slider 
-                        Minimum="0" 
-                        Maximum="1" 
-                        Value="{Binding Source={x:Static local:FileExplorerSettings.Default}, Path=PreviewVolume}"
-                        TickFrequency="0.01"
-                        IsSnapToTickEnabled="True"
-                        Grid.Column="3"
-                        VerticalAlignment="Center"
-                        Margin="10,0"/>
-
+                    <c:TextBoxSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=PreviewVolumePercentage}" 
+                                 DefaultValue="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=PreviewVolumePercentage}" 
+                                 StringFormat="F0" 
+                                 Unit="%"
+                                 DefaultMin="0"
+                                 DefaultMax="100"
+                                 Min="0"
+                                 Max="200"
+                                 HorizontalAlignment="Right"
+                                 Width="200"/>
+                </Grid>
+                <Grid>
+                    <Label Content="プレビューの倍率" VerticalAlignment="Center" Grid.Column="0"/>
+                    <c:TextBoxSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=PreviewSizeMultiplier}" 
+                                     DefaultValue="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=PreviewSizeMultiplier}" 
+                                     StringFormat="F0" 
+                                     Unit="%"
+                                     DefaultMin="0"
+                                     DefaultMax="100"
+                                     Min="0"
+                                     Max="300"
+                                     HorizontalAlignment="Right"
+                                     Width="200"/>
                 </Grid>
             </StackPanel>
         </Expander>

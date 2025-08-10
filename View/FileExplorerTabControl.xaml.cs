@@ -1,8 +1,5 @@
 ﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
-using System.Text;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using YMM4FileExplorer.Model;
@@ -14,8 +11,6 @@ namespace YMM4FileExplorer
 {
     public partial class FileExplorerTabControl : UserControl
     {
-        private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
-
         public ObservableCollection<FileExplorerTabControlViewModel> Tabs { get; set; }
 
         public FileExplorerTabControl()
@@ -37,7 +32,7 @@ namespace YMM4FileExplorer
             {
                 await LoadTabsStateAsync();
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.WriteLine(ex.Message);
             }
@@ -49,39 +44,38 @@ namespace YMM4FileExplorer
             {
                 await SaveTabsStateAsync();
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.WriteLine(ex.Message);
             }
         }
 
-        private async Task LoadTabsStateAsync()
+        private Task LoadTabsStateAsync()
         {
-            var json = FileExplorerSettings.Default.SavedTabsJson;
-            if (string.IsNullOrEmpty(json))
+            var savedTabs = FileExplorerSettings.Default.SavedTabs;
+            if (savedTabs == null || savedTabs.Count == 0)
             {
-                Dispatcher.Invoke(() => AddNewTab("新しいタブ", "C:\\"));
-                return;
+                var newTab = Dispatcher.Invoke(() => AddNewTab("新しいタブ", "C:\\"));
+                MainTabControl.SelectedItem = newTab;
+                return Task.CompletedTask;
             }
 
             try
             {
-                using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-                var savedTabs = await JsonSerializer.DeserializeAsync<List<TabState>>(
-                    stream,
-                    _jsonOptions
-                );
-                if (savedTabs == null || savedTabs.Count == 0)
-                {
-                    throw new InvalidOperationException("Failed to deserialize or list is empty.");
-                }
-
                 Dispatcher.Invoke(() =>
                 {
                     foreach (var tabState in savedTabs)
                     {
                         AddNewTab(tabState.Header, tabState.Path, tabState.Id);
                     }
+
+                    var lastSelectedId = FileExplorerSettings.Default.LastSelectedTabId;
+
+                    var tabToSelect = string.IsNullOrEmpty(lastSelectedId)
+                        ? Tabs.FirstOrDefault()
+                        : Tabs.FirstOrDefault(vm => vm.Id == lastSelectedId);
+
+                    MainTabControl.SelectedItem = tabToSelect ?? Tabs.FirstOrDefault();
                 });
             }
             catch
@@ -92,22 +86,27 @@ namespace YMM4FileExplorer
                     AddNewTab("新しいタブ (復元失敗)", "C:\\");
                 });
             }
+
+            return Task.CompletedTask;
         }
 
-        private async Task SaveTabsStateAsync()
+        private Task SaveTabsStateAsync()
         {
             var tabsToSave = Tabs.Select(vm => new TabState
             {
                 Id = vm.Id,
                 Header = vm.Header,
                 Path = vm.Path,
-            })
-                .ToList();
+            }).ToList();
 
-            using var stream = new MemoryStream();
-            await JsonSerializer.SerializeAsync(stream, tabsToSave, _jsonOptions);
-            string json = Encoding.UTF8.GetString(stream.ToArray());
-            FileExplorerSettings.Default.SavedTabsJson = json;
+            FileExplorerSettings.Default.SavedTabs = tabsToSave;
+
+            if (MainTabControl.SelectedItem is FileExplorerTabControlViewModel selectedVm)
+            {
+                FileExplorerSettings.Default.LastSelectedTabId = selectedVm.Id;
+            }
+
+            return Task.CompletedTask;
         }
 
         #endregion
@@ -118,10 +117,11 @@ namespace YMM4FileExplorer
         {
             try
             {
-                AddNewTab($"新しいタブ {Tabs.Count + 1}", "C:\\");
+                var newTab = AddNewTab($"新しいタブ {Tabs.Count + 1}", "C:\\");
+                MainTabControl.SelectedItem = newTab;
                 await SaveTabsStateAsync();
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.WriteLine($"タブ追加中にエラーが発生しました: {ex.Message}");
             }
@@ -141,7 +141,7 @@ namespace YMM4FileExplorer
                     await SaveTabsStateAsync();
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.WriteLine($"タブ削除中にエラーが発生しました: {ex.Message}");
             }
@@ -164,7 +164,7 @@ namespace YMM4FileExplorer
                     }
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.WriteLine($"タブ名変更中にエラーが発生しました: {ex.Message}");
             }
@@ -181,7 +181,7 @@ namespace YMM4FileExplorer
 
         #endregion
 
-        private void AddNewTab(string header, string path, string? id = null)
+        private FileExplorerTabControlViewModel AddNewTab(string header, string path, string? id = null)
         {
             var tabContent = new FileExplorerControl(path);
             var newTabViewModel = new FileExplorerTabControlViewModel(header, path, tabContent, id);
@@ -193,7 +193,8 @@ namespace YMM4FileExplorer
             };
 
             Tabs.Add(newTabViewModel);
-            MainTabControl.SelectedItem = newTabViewModel;
+
+            return newTabViewModel;
         }
 
         private string ShowInputDialog(string defaultValue)

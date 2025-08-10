@@ -51,6 +51,15 @@ namespace YMM4FileExplorer
         private bool _isInitialContentLoaded = false;
         public event Action<string>? PathChanged;
 
+        // Navigation
+        private readonly List<string> _navigationHistory = [];
+        private int _currentHistoryIndex = -1;
+        private bool _isNavigatingViaHistory = false;
+
+        // Search
+        private readonly DispatcherTimer _searchTimer;
+        private CancellationTokenSource? _searchCts;
+
         public FileExplorerControl(string initialPath = "C:\\")
         {
             InitializeComponent();
@@ -67,6 +76,12 @@ namespace YMM4FileExplorer
                 Interval = TimeSpan.FromMilliseconds(200)
             };
             _timer.Tick += Timer_Tick;
+
+            _searchTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(300)
+            };
+            _searchTimer.Tick += SearchTimer_Tick;
         }
 
         private async void FileExplorerControl_Loaded(object sender, RoutedEventArgs e)
@@ -119,12 +134,11 @@ namespace YMM4FileExplorer
             if (FileExplorerSettings.Default.IsCheckVersion && await GetVersion.CheckVersionAsync("YMM4エクスプローラー"))
             {
                 string url =
-                    "https://ymm4-info.net/ymme/YMM4%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%97%E3%83%AD%E3%83%BC%E3%83%A9%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3";
+                    "https://ymm4-info.net/ymme/YMM4%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%97%E3%83%AD%E3%83%BC%E3%83%A9%E3%83%BC%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3";
                 var result = MessageBox.Show(
                     $"新しいバージョンがあります。\n\n最新バージョンを確認しますか？\nOKを押すと配布サイトが開きます。\n{url}",
                     "YMM4エクスプローラープラグイン",
-                    MessageBoxButton.OKCancel,
-                    MessageBoxImage.Information);
+                    MessageBoxButton.OKCancel);
 
                 if (result == MessageBoxResult.OK)
                 {
@@ -141,8 +155,8 @@ namespace YMM4FileExplorer
             }
 
             await LoadDrivesAsync();
-
             await NavigateToInitialPathAsync(_initialPath);
+            AddHistory(_initialPath);
         }
 
         private async Task NavigateToInitialPathAsync(string path)
@@ -219,10 +233,14 @@ namespace YMM4FileExplorer
 
         private async Task SelectTreeViewItemByPathAsync(string path)
         {
-            var pathParts = path.Split(Path.DirectorySeparatorChar).ToList();
-            if (pathParts.Count > 1 && pathParts[0].EndsWith(':'))
+            var cleanPath = path.TrimEnd(Path.DirectorySeparatorChar);
+            if (string.IsNullOrEmpty(cleanPath)) return;
+
+            var pathParts = cleanPath.Split(Path.DirectorySeparatorChar).ToList();
+
+            if (pathParts.Count > 0 && pathParts[0].Length == 2 && pathParts[0][1] == ':')
             {
-                pathParts[0] = pathParts[0] + Path.DirectorySeparatorChar;
+                pathParts[0] += Path.DirectorySeparatorChar;
             }
 
             ItemsControl? parent = DirectoryTree;
@@ -231,17 +249,16 @@ namespace YMM4FileExplorer
             foreach (var part in pathParts)
             {
                 if (parent == null) break;
-
+                await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
                 TreeViewItem? currentItem = null;
+
                 foreach (TreeViewItem item in parent.Items)
                 {
-                    var itemPath = Path.GetFileName((string)item.Tag);
-                    if (parent == DirectoryTree)
-                    {
-                        itemPath = (string)item.Tag;
-                    }
+                    var itemPath = (parent == DirectoryTree)
+                        ? (string)item.Tag
+                        : Path.GetFileName((string)item.Tag);
 
-                    if (itemPath == part)
+                    if (string.Equals(itemPath, part, StringComparison.OrdinalIgnoreCase))
                     {
                         currentItem = item;
                         break;
@@ -250,15 +267,22 @@ namespace YMM4FileExplorer
 
                 if (currentItem != null)
                 {
+                    foreach (TreeViewItem sibling in parent.Items)
+                    {
+                        if (sibling != currentItem)
+                        {
+                            sibling.IsExpanded = false;
+                        }
+                    }
+
                     currentItem.IsExpanded = true;
-
                     await ExpandNodeAsync(currentItem);
-
                     parent = currentItem;
                     finalItem = currentItem;
                 }
                 else
                 {
+                    Debug.WriteLine($"[階層復元エラー] パス '{part}' が見つかりません。探索中の親: '{(parent as TreeViewItem)?.Tag ?? "ルート"}'");
                     break;
                 }
             }
@@ -322,19 +346,38 @@ namespace YMM4FileExplorer
                                 subItem.Items.Add(null);
                             }
                         }
-                        catch { }
+                        catch (UnauthorizedAccessException)
+                        {
+                            // アクセス不可能なファイルをスキップ
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"サブディレクトリの有無の確認に失敗: {dir.FullName}, Error: {ex.Message}");
+                        }
 
                         subItem.Expanded += Folder_Expanded;
                         item.Items.Add(subItem);
                     }
                 }
-                catch { }
+                catch (UnauthorizedAccessException)
+                {
+                    Debug.WriteLine($"アクセスが許可されていないフォルダ: {item.Tag}");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"フォルダ展開中にエラー: {item.Tag}, Error: {ex.Message}");
+                }
             }
         }
 
 
         private async void DirectoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
+            if (_isNavigatingViaHistory)
+            {
+                return;
+            }
+
             try
             {
                 _watcher?.Dispose();
@@ -359,6 +402,8 @@ namespace YMM4FileExplorer
                         _watcher.Renamed += OnFileSystemChanged;
 
                         PathChanged?.Invoke(path);
+
+                        AddHistory(path);
                     }
                 }
             }
@@ -603,9 +648,9 @@ namespace YMM4FileExplorer
             else
             {
                 _timer.Stop();
-                if (PreviewContent.Content is MediaElement oldmedia)
+                if (PreviewContent.Content is MediaElement oldMedia)
                 {
-                    oldmedia.Close();
+                    oldMedia.Close();
                 }
                 else if (PreviewContent.Content is Grid grid &&
                          grid.Children.Count > 1 &&
@@ -643,7 +688,7 @@ namespace YMM4FileExplorer
                             var media = new MediaElement
                             {
                                 Source = new Uri(fullPath),
-                                Volume = FileExplorerSettings.Default.PreviewVolume,
+                                Volume = FileExplorerSettings.Default.PreviewVolumePercentage / 100d,
                                 Stretch = Stretch.Uniform,
                                 LoadedBehavior = MediaState.Manual,
                                 UnloadedBehavior = MediaState.Manual
@@ -658,7 +703,7 @@ namespace YMM4FileExplorer
                             var audioMedia = new MediaElement
                             {
                                 Source = new Uri(fullPath),
-                                Volume = FileExplorerSettings.Default.PreviewVolume,
+                                Volume = FileExplorerSettings.Default.PreviewVolumePercentage / 100d,
                                 LoadedBehavior = MediaState.Manual,
                                 UnloadedBehavior = MediaState.Manual
                             };
@@ -686,6 +731,14 @@ namespace YMM4FileExplorer
                         default:
                             return;
                     }
+
+                    const double baseWidth = 300;
+                    const double baseMaxHeight = 400;
+
+                    double multiplier = FileExplorerSettings.Default.PreviewSizeMultiplier / 100d;
+
+                    PreviewBorder.Width = baseWidth * multiplier;
+                    PreviewBorder.MaxHeight = baseMaxHeight * multiplier;
 
                     PreviewPopup.IsOpen = true;
                 }
@@ -777,8 +830,10 @@ namespace YMM4FileExplorer
 
         #region 検索ロジック
 
-        private async void SearchButton_Click(object sender, RoutedEventArgs e)
+        private async Task PerformSearchAsync(CancellationToken token)
         {
+            this.Cursor = Cursors.Wait;
+
             string searchTerm = SearchTextBox.Text;
             bool searchSubdirectories = SearchSubdirectoriesCheckBox.IsChecked == true;
 
@@ -788,44 +843,78 @@ namespace YMM4FileExplorer
                 {
                     await LoadFilesAsync(_currentDirectory);
                 }
+                this.Cursor = Cursors.Arrow;
                 return;
             }
 
             if (string.IsNullOrEmpty(_currentDirectory))
             {
-                MessageBox.Show("検索対象のフォルダを選択してください。", "情報", MessageBoxButton.OK, MessageBoxImage.Information);
+                this.Cursor = Cursors.Arrow;
                 return;
             }
 
-            await SearchFilesAsync(_currentDirectory, searchTerm, searchSubdirectories);
+            var fileCollection = new ObservableCollection<FileItem>();
+            FileList.ItemsSource = fileCollection;
+
+            try
+            {
+                await SearchFilesAsync(_currentDirectory, searchTerm, searchSubdirectories, fileCollection, token);
+            }
+            finally
+            {
+                this.Cursor = Cursors.Arrow;
+            }
+        }
+
+        private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            _searchCts?.Cancel();
+
+            _searchTimer.Stop();
+            _searchTimer.Start();
+        }
+
+        private async void SearchTimer_Tick(object? sender, EventArgs e)
+        {
+            _searchTimer.Stop();
+
+            _searchCts = new CancellationTokenSource();
+            try
+            {
+                await PerformSearchAsync(_searchCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("PerformSearchAsync was canceled.");
+            }
         }
 
         private void SearchTextBox_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
-                SearchButton_Click(sender, e);
+                _searchTimer.Stop();
+                _searchCts?.Cancel();
+                SearchTimer_Tick(sender, e);
             }
         }
 
-        private async Task SearchFilesAsync(string path, string searchTerm, bool searchSubdirectories)
+        private async Task SearchFilesAsync(string path, string searchTerm, bool searchSubdirectories, ObservableCollection<FileItem> fileCollection, CancellationToken token)
         {
-            this.Cursor = Cursors.Wait;
-            var fileCollection = new ObservableCollection<FileItem>();
-            FileList.ItemsSource = fileCollection;
-
             try
             {
                 await Task.Run(async () =>
                 {
                     if (searchSubdirectories)
                     {
-                        await SearchRecursivelyAsync(path, searchTerm, fileCollection);
+                        await SearchRecursivelyAsync(path, searchTerm, fileCollection, token);
                     }
                     else
                     {
                         foreach (var file in Directory.EnumerateFiles(path, $"*{searchTerm}*"))
                         {
+                            token.ThrowIfCancellationRequested();
+
                             var info = new FileInfo(file);
                             if (!FileExplorerSettings.Default.ShowHiddenFiles && info.Attributes.HasFlag(FileAttributes.Hidden))
                                 continue;
@@ -849,7 +938,11 @@ namespace YMM4FileExplorer
                             });
                         }
                     }
-                });
+                }, token);
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("Search was successfully canceled.");
             }
             catch (Exception ex)
             {
@@ -861,12 +954,14 @@ namespace YMM4FileExplorer
             }
         }
 
-        private static async Task SearchRecursivelyAsync(string directory, string searchTerm, ObservableCollection<FileItem> collection)
+        private static async Task SearchRecursivelyAsync(string directory, string searchTerm, ObservableCollection<FileItem> collection, CancellationToken token)
         {
             try
             {
                 foreach (var file in Directory.EnumerateFiles(directory, $"*{searchTerm}*"))
                 {
+                    token.ThrowIfCancellationRequested();
+
                     var info = new FileInfo(file);
                     if (!FileExplorerSettings.Default.ShowHiddenFiles && info.Attributes.HasFlag(FileAttributes.Hidden))
                         continue;
@@ -899,7 +994,8 @@ namespace YMM4FileExplorer
             {
                 foreach (var subDirectory in Directory.EnumerateDirectories(directory))
                 {
-                    await SearchRecursivelyAsync(subDirectory, searchTerm, collection);
+                    token.ThrowIfCancellationRequested();
+                    await SearchRecursivelyAsync(subDirectory, searchTerm, collection, token);
                 }
             }
             catch (UnauthorizedAccessException)
@@ -907,6 +1003,102 @@ namespace YMM4FileExplorer
             }
         }
 
+        #endregion
+
+        #region 戻る、進む、リロードボタンの実装
+        private void UpdateNavigationButtons()
+        {
+            BackButton.IsEnabled = _currentHistoryIndex > 0;
+            ForwardButton.IsEnabled = _currentHistoryIndex < _navigationHistory.Count - 1;
+        }
+
+        private void AddHistory(string path)
+        {
+            if (_navigationHistory.Count > 0 && _navigationHistory[_currentHistoryIndex] == path)
+            {
+                return;
+            }
+
+            if (_currentHistoryIndex < _navigationHistory.Count - 1)
+            {
+                _navigationHistory.RemoveRange(_currentHistoryIndex + 1, _navigationHistory.Count - (_currentHistoryIndex + 1));
+            }
+
+            _navigationHistory.Add(path);
+            _currentHistoryIndex++;
+            UpdateNavigationButtons();
+        }
+
+        private async void BackButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentHistoryIndex > 0)
+            {
+                _currentHistoryIndex--;
+                await NavigateHistory();
+            }
+        }
+
+        private async void ForwardButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentHistoryIndex < _navigationHistory.Count - 1)
+            {
+                _currentHistoryIndex++;
+                await NavigateHistory();
+            }
+        }
+
+        private async void ReloadButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_currentDirectory))
+            {
+                await LoadFilesAsync(_currentDirectory);
+            }
+        }
+
+        private async Task NavigateHistory()
+        {
+            _isNavigatingViaHistory = true;
+
+            string pathToNavigate = _navigationHistory[_currentHistoryIndex];
+            await SelectTreeViewItemByPathAsync(pathToNavigate);
+
+            if (Directory.Exists(pathToNavigate))
+            {
+                _currentDirectory = pathToNavigate;
+
+                await LoadFilesAsync(pathToNavigate);
+
+                _watcher?.Dispose();
+                _watcher = new FileSystemWatcher(pathToNavigate)
+                {
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
+                    EnableRaisingEvents = true,
+                };
+                _watcher.Created += OnFileSystemChanged;
+                _watcher.Deleted += OnFileSystemChanged;
+                _watcher.Renamed += OnFileSystemChanged;
+
+                PathChanged?.Invoke(pathToNavigate);
+            }
+
+            _isNavigatingViaHistory = false;
+
+            UpdateNavigationButtons();
+        }
+
+        private void FileExplorerControl_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.XButton1)
+            {
+                BackButton_Click(sender, e);
+                e.Handled = true;
+            }
+            else if (e.ChangedButton == MouseButton.XButton2)
+            {
+                ForwardButton_Click(sender, e);
+                e.Handled = true;
+            }
+        }
         #endregion
     }
 }

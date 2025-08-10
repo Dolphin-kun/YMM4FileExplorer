@@ -1,4 +1,5 @@
-﻿using YukkuriMovieMaker.Plugin;
+﻿using YMM4FileExplorer.Model;
+using YukkuriMovieMaker.Plugin;
 
 namespace YMM4FileExplorer.Settings
 {
@@ -19,11 +20,17 @@ namespace YMM4FileExplorer.Settings
         public bool ShowHiddenFiles { get => showHiddenFiles; set => Set(ref showHiddenFiles, value); }
         private bool showHiddenFiles = false;
 
-        public double PreviewVolume { get => previewVolume; set => Set(ref previewVolume, value); }
-        private double previewVolume = 0.5;
+        public double PreviewVolumePercentage { get => previewVolumePercentage; set => Set(ref previewVolumePercentage, value); }
+        private double previewVolumePercentage = 50;
 
-        public string SavedTabsJson { get => savedTabsJson; set => Set(ref savedTabsJson, value); }
-        private string savedTabsJson = string.Empty;
+        public double PreviewSizeMultiplier { get => previewSizeMultiplier; set => Set(ref previewSizeMultiplier, value); }
+        private double previewSizeMultiplier = 100;
+
+        public List<TabState> SavedTabs { get => savedTabs; set => Set(ref savedTabs, value); }
+        private List<TabState> savedTabs = [];
+
+        public string? LastSelectedTabId { get => lastSelectedTabId; set => Set(ref lastSelectedTabId, value); }
+        private string? lastSelectedTabId;
 
         public override void Initialize()
         {
