@@ -12,6 +12,7 @@ namespace YMM4FileExplorer
     public partial class FileExplorerTabControl : UserControl
     {
         public ObservableCollection<FileExplorerTabControlViewModel> Tabs { get; set; }
+        bool isLoaded = false;
 
         public FileExplorerTabControl()
         {
@@ -20,13 +21,13 @@ namespace YMM4FileExplorer
             Tabs = [];
             MainTabControl.ItemsSource = Tabs;
 
-            this.Loaded += FileExplorerTabControl_Loaded;
+            FileExplorerTabControl_Loaded();
             this.Unloaded += FileExplorerTabControl_Unloaded;
         }
 
         #region 状態の保存と復元
 
-        private async void FileExplorerTabControl_Loaded(object sender, RoutedEventArgs e)
+        private async void FileExplorerTabControl_Loaded()
         {
             try
             {
@@ -40,14 +41,22 @@ namespace YMM4FileExplorer
 
         private async void FileExplorerTabControl_Unloaded(object sender, RoutedEventArgs e)
         {
-            try
+            if (!isLoaded)
             {
-                await SaveTabsStateAsync();
+                isLoaded = true;
             }
-            catch (Exception ex)
+            else
             {
-                Debug.WriteLine(ex.Message);
+                try
+                {
+                    await SaveTabsStateAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(ex.Message);
+                }
             }
+
         }
 
         private Task LoadTabsStateAsync()

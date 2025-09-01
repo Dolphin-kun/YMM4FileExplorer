@@ -14,9 +14,6 @@ namespace YMM4FileExplorer.Settings
         public bool IsCheckVersion { get => isCheckVersion; set => Set(ref isCheckVersion, value); }
         private bool isCheckVersion = true;
 
-        public bool IsTopmost { get => isTopmost; set => Set(ref isTopmost, value); }
-        private bool isTopmost = true;
-
         public bool ShowHiddenFiles { get => showHiddenFiles; set => Set(ref showHiddenFiles, value); }
         private bool showHiddenFiles = false;
 

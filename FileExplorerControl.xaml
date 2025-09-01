@@ -35,16 +35,17 @@
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="250"/>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="5,5,5,5" VerticalAlignment="Center">
+        <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="5,5,5,5" VerticalAlignment="Center">
             <Button x:Name="BackButton" Click="BackButton_Click" Margin="0,0,2,0" IsEnabled="False" Width="26" Height="20" Padding="4">
                 <Path Data="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"
                       Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                       Stretch="Uniform" />
             </Button>
-            
+
             <Button x:Name="ForwardButton" Click="ForwardButton_Click" Margin="0,0,10,0" IsEnabled="False" Width="26" Height="20" Padding="4">
                 <Path Data="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"
                       Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
@@ -56,19 +57,24 @@
                       Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                       Stretch="Uniform" />
             </Button>
-            
+
             <TextBox x:Name="SearchTextBox" Width="200" VerticalAlignment="Center" Margin="0,0,5,0" KeyDown="SearchTextBox_KeyDown" TextChanged="SearchTextBox_TextChanged" />
             <CheckBox x:Name="SearchSubdirectoriesCheckBox" Content="サブフォルダも検索" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="True" />
         </StackPanel>
 
-        <TreeView Name="DirectoryTree"
-                  Grid.Row="1"
-                  SelectedItemChanged="DirectoryTree_SelectedItemChanged"/>
+        <Grid Grid.Row="1" Grid.Column="0">
+            <TreeView Name="DirectoryTree" SelectedItemChanged="DirectoryTree_SelectedItemChanged"/>
+        </Grid>
 
+        <GridSplitter Grid.Row="1" Grid.Column="1"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Stretch"
+              Width="5"
+              Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"/>
 
         <ListView Name="FileList" 
                   Grid.Row="1"
-                  Grid.Column="1"
+                  Grid.Column="2"
                   SelectionMode="Extended"
                   PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
                   PreviewMouseMove="FileList_PreviewMouseMove"

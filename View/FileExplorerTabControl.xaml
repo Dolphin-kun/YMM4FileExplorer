@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:YMM4FileExplorer"
+             xmlns:c="clr-namespace:YukkuriMovieMaker.Controls;assembly=YukkuriMovieMaker.Controls"
              xmlns:theme="clr-namespace:YukkuriMovieMaker.Theme;assembly=YukkuriMovieMaker.Plugin"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
@@ -81,16 +82,16 @@
                                   Stretch="Uniform"/>
                         </Button>
 
-                        <Button Content="︙" DockPanel.Dock="Left"
-                                FontFamily="Meiryo UI" Margin="-3,0,0,0" 
-                                BorderThickness="0" Background="Transparent" VerticalAlignment="Center"
-                                Click="MenuButton_Click">
-                            <Button.ContextMenu>
+                        <c:DropDownButton Content="︙" Background="Transparent" BorderThickness="0">
+                            <c:DropDownButton.Style>
+                                <Style TargetType="c:DropDownButton" BasedOn="{StaticResource {x:Type ToggleButton}}"/>
+                            </c:DropDownButton.Style>
+                            <c:DropDownButton.ContextMenu>
                                 <ContextMenu>
                                     <MenuItem Header="名前の変更" Click="RenameTab_Click"/>
                                 </ContextMenu>
-                            </Button.ContextMenu>
-                        </Button>
+                            </c:DropDownButton.ContextMenu>
+                        </c:DropDownButton>
                         <TextBlock Text="{Binding Header}"
                                    Foreground="{DynamicResource {x:Static theme:YMM4Colors.IconBrushKey}}"
                                    VerticalAlignment="Center"

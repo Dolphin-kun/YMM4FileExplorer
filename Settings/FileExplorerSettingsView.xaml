@@ -37,10 +37,6 @@
         <Expander Header="YMM4エクスプローラー" IsExpanded="True">
             <StackPanel>
                 <Grid>
-                    <Label Content="常に手前に表示する"/>
-                    <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=IsTopmost}" HorizontalAlignment="Right"/>
-                </Grid>
-                <Grid>
                     <Label Content="隠しファイルを表示する"/>
                     <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=ShowHiddenFiles}" HorizontalAlignment="Right"/>
                 </Grid>

@@ -60,13 +60,16 @@ namespace YMM4FileExplorer
         private readonly DispatcherTimer _searchTimer;
         private CancellationTokenSource? _searchCts;
 
+        //v4.45.0.0
+        static bool _isVersionCheckDone = false;
+
         public FileExplorerControl(string initialPath = "C:\\")
         {
             InitializeComponent();
 
             _initialPath = initialPath;
 
-            this.Loaded += FileExplorerControl_Loaded;
+            FileExplorerControl_Loaded();
             this.Unloaded += FileExplorerControl_Unloaded;
 
             PreviewPopup.Closed += PreviewPopup_Closed;
@@ -84,7 +87,7 @@ namespace YMM4FileExplorer
             _searchTimer.Tick += SearchTimer_Tick;
         }
 
-        private async void FileExplorerControl_Loaded(object sender, RoutedEventArgs e)
+        private async void FileExplorerControl_Loaded()
         {
             try
             {
@@ -97,8 +100,7 @@ namespace YMM4FileExplorer
                 MessageBox.Show(
                     "初期化中にエラーが発生しました。\n" + ex.Message,
                     "エラー",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error
+                    MessageBoxButton.OK
                 );
             }
         }
@@ -110,50 +112,34 @@ namespace YMM4FileExplorer
 
             _isInitialContentLoaded = true;
 
-            var parentWindow = Window.GetWindow(this);
-            if (parentWindow != null)
+            if (!_isVersionCheckDone)
             {
-                parentWindow.Title = "YMM4 エクスプローラー";
+                _isVersionCheckDone = true;
 
-                if (FileExplorerSettings.Default.IsTopmost)
+                if (FileExplorerSettings.Default.IsCheckVersion && await GetVersion.CheckVersionAsync("YMM4エクスプローラー"))
                 {
-                    parentWindow.Topmost = true;
+                    string url =
+                        "https://ymm4-info.net/ymme/YMM4%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%97%E3%83%AD%E3%83%BC%E3%83%A9%E3%83%BC%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3";
+                    var result = MessageBox.Show(
+                        $"新しいバージョンがあります。\n\n最新バージョンを確認しますか？\nOKを押すと配布サイトが開きます。\n{url}",
+                        "YMM4エクスプローラープラグイン",
+                        MessageBoxButton.OKCancel);
 
-                    parentWindow.Deactivated += (s, args) =>
+                    if (result == MessageBoxResult.OK)
                     {
-                        parentWindow.Topmost = false;
-                    };
-
-                    parentWindow.Activated += (s, args) =>
-                    {
-                        parentWindow.Topmost = true;
-                    };
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = url,
+                            UseShellExecute = true
+                        });
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("最新のバージョンです");
                 }
             }
-
-            if (FileExplorerSettings.Default.IsCheckVersion && await GetVersion.CheckVersionAsync("YMM4エクスプローラー"))
-            {
-                string url =
-                    "https://ymm4-info.net/ymme/YMM4%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%97%E3%83%AD%E3%83%BC%E3%83%A9%E3%83%BC%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3";
-                var result = MessageBox.Show(
-                    $"新しいバージョンがあります。\n\n最新バージョンを確認しますか？\nOKを押すと配布サイトが開きます。\n{url}",
-                    "YMM4エクスプローラープラグイン",
-                    MessageBoxButton.OKCancel);
-
-                if (result == MessageBoxResult.OK)
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = url,
-                        UseShellExecute = true
-                    });
-                }
-            }
-            else
-            {
-                Debug.WriteLine("最新のバージョンです");
-            }
-
+            
             await LoadDrivesAsync();
             await NavigateToInitialPathAsync(_initialPath);
             AddHistory(_initialPath);
@@ -412,8 +398,7 @@ namespace YMM4FileExplorer
                 MessageBox.Show(
                     $"選択したディレクトリが存在しないか、アクセスできません。\n{ex.Message}",
                     "エラー",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error
+                    MessageBoxButton.OK
                 );
             }
         }
@@ -837,6 +822,30 @@ namespace YMM4FileExplorer
             string searchTerm = SearchTextBox.Text;
             bool searchSubdirectories = SearchSubdirectoriesCheckBox.IsChecked == true;
 
+            if (Directory.Exists(searchTerm))
+            {
+                await LoadFilesAsync(searchTerm);
+                this.Cursor = Cursors.Arrow;
+                return;
+            }
+
+            if (File.Exists(searchTerm))
+            {
+                string? parentDirectory = Path.GetDirectoryName(searchTerm);
+                if (!string.IsNullOrEmpty(parentDirectory))
+                {
+                    await LoadFilesAsync(parentDirectory);
+                    var fileItemToSelect = FileList.Items.OfType<FileItem>().FirstOrDefault(f => f.FullPath == searchTerm);
+                    if(fileItemToSelect != null)
+                    {
+                        FileList.SelectedItem = fileItemToSelect;
+                        FileList.ScrollIntoView(fileItemToSelect);
+                    }
+                }
+                this.Cursor = Cursors.Arrow;
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(searchTerm))
             {
                 if (!string.IsNullOrEmpty(_currentDirectory))
@@ -946,7 +955,7 @@ namespace YMM4FileExplorer
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"検索中に予期せぬエラーが発生しました。\n{ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"検索中に予期せぬエラーが発生しました。\n{ex.Message}", "エラー", MessageBoxButton.OK);
             }
             finally
             {
