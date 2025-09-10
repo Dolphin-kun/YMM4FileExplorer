@@ -9,14 +9,9 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
 
-    <UserControl.Resources>
-        <local:PercentageConverter  x:Key="PercentageConverter"/>
-    </UserControl.Resources>
-
     <StackPanel Focusable="True">
-
         <Expander Header="プラグイン設定" IsExpanded="True">
-            <Border BorderBrush="{DynamicResource {x:Static theme:YMM4Colors.IconBrushKey}}" BorderThickness="0.5" Margin="5" Padding="5" CornerRadius="4">
+            <Border BorderBrush="{DynamicResource {x:Static theme:YMM4Colors.IconBorderBrushKey}}" BorderThickness="0.5" Margin="5" Padding="5" CornerRadius="4">
                 <StackPanel>
                     <Grid>
                         <Label Content="現在のバージョン" VerticalAlignment="Center"/>
@@ -25,7 +20,6 @@
                            VerticalAlignment="Center"
                            Opacity="0.7"/>
                     </Grid>
-
                     <Grid>
                         <Label Content="起動時にアップデートを確認する"/>
                         <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=IsCheckVersion}" HorizontalAlignment="Right"/>
@@ -39,6 +33,10 @@
                 <Grid>
                     <Label Content="隠しファイルを表示する"/>
                     <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=ShowHiddenFiles}" HorizontalAlignment="Right"/>
+                </Grid>
+                <Grid>
+                    <Label Content="フォルダ選択時に表示を移動する"/>
+                    <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=ShowSelectedFolderPath}" HorizontalAlignment="Right"/>
                 </Grid>
             </StackPanel>
         </Expander>

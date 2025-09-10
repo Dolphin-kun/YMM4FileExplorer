@@ -1,4 +1,5 @@
-﻿using YMM4FileExplorer.Model;
+﻿using System.Collections.ObjectModel;
+using YMM4FileExplorer.Model;
 using YukkuriMovieMaker.Plugin;
 
 namespace YMM4FileExplorer.Settings
@@ -17,6 +18,9 @@ namespace YMM4FileExplorer.Settings
         public bool ShowHiddenFiles { get => showHiddenFiles; set => Set(ref showHiddenFiles, value); }
         private bool showHiddenFiles = false;
 
+        public bool ShowSelectedFolderPath { get => showSelectedFolderPath; set => Set(ref showSelectedFolderPath, value); }
+        private bool showSelectedFolderPath = true;
+
         public double PreviewVolumePercentage { get => previewVolumePercentage; set => Set(ref previewVolumePercentage, value); }
         private double previewVolumePercentage = 50;
 
@@ -28,6 +32,9 @@ namespace YMM4FileExplorer.Settings
 
         public string? LastSelectedTabId { get => lastSelectedTabId; set => Set(ref lastSelectedTabId, value); }
         private string? lastSelectedTabId;
+
+        public ObservableCollection<FavoriteItem> Favorites { get => favorites; set => Set(ref favorites, value); }
+        private ObservableCollection<FavoriteItem> favorites = [];
 
         public override void Initialize()
         {

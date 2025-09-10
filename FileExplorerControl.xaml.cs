@@ -11,26 +11,17 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using YMM4FileExplorer.Helpers;
+using YMM4FileExplorer.Model;
 using YMM4FileExplorer.Settings;
+using YukkuriMovieMaker.Commons;
 
 namespace YMM4FileExplorer
 {
     [SuppressMessage("Design", "CA1001", Justification = "<保留中>")]
     public partial class FileExplorerControl : UserControl
     {
-        public class FileItem
-        {
-            public string? Name { get; set; }
-            public string? FullPath { get; set; }
-            public string? Type { get; set; }
-            public string? Size { get; set; }
-            public long SizeInBytes { get; set; }
-            public string? LastWriteString { get; set; }
-            public DateTime LastWriteTime { get; set; }
-            public ImageSource? Icon { get; set; }
-
-            public bool IsDirectory { get; set; }
-        }
+        // tree
+        private bool _isUpdatingTree = false;
 
         //watcher
         private FileSystemWatcher? _watcher;
@@ -48,20 +39,17 @@ namespace YMM4FileExplorer
 
         //Save
         private readonly string _initialPath;
-        private bool _isInitialContentLoaded = false;
         public event Action<string>? PathChanged;
 
         // Navigation
         private readonly List<string> _navigationHistory = [];
         private int _currentHistoryIndex = -1;
         private bool _isNavigatingViaHistory = false;
+        private bool _isNavigatingWithFavorite = false;
 
         // Search
         private readonly DispatcherTimer _searchTimer;
         private CancellationTokenSource? _searchCts;
-
-        //v4.45.0.0
-        static bool _isVersionCheckDone = false;
 
         public FileExplorerControl(string initialPath = "C:\\")
         {
@@ -107,49 +95,18 @@ namespace YMM4FileExplorer
 
         private async Task InitializeAsync()
         {
-            if (_isInitialContentLoaded)
-                return;
-
-            _isInitialContentLoaded = true;
-
-            if (!_isVersionCheckDone)
+            if (FileExplorerSettings.Default.ShowSelectedFolderPath)
             {
-                _isVersionCheckDone = true;
-
-                if (FileExplorerSettings.Default.IsCheckVersion && await GetVersion.CheckVersionAsync("YMM4エクスプローラー"))
-                {
-                    string url =
-                        "https://ymm4-info.net/ymme/YMM4%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%97%E3%83%AD%E3%83%BC%E3%83%A9%E3%83%BC%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3";
-                    var result = MessageBox.Show(
-                        $"新しいバージョンがあります。\n\n最新バージョンを確認しますか？\nOKを押すと配布サイトが開きます。\n{url}",
-                        "YMM4エクスプローラープラグイン",
-                        MessageBoxButton.OKCancel);
-
-                    if (result == MessageBoxResult.OK)
-                    {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = url,
-                            UseShellExecute = true
-                        });
-                    }
-                }
-                else
-                {
-                    Debug.WriteLine("最新のバージョンです");
-                }
+                await UpdateTreeView(_initialPath);
+                _currentDirectory = _initialPath;
+                await LoadFilesAsync(_initialPath);
+                AddHistory(_initialPath);
             }
-            
-            await LoadDrivesAsync();
-            await NavigateToInitialPathAsync(_initialPath);
-            AddHistory(_initialPath);
-        }
-
-        private async Task NavigateToInitialPathAsync(string path)
-        {
-            if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
+            else
             {
-                await SelectTreeViewItemByPathAsync(path);
+                await LoadDrivesAsync();
+                await SelectTreeViewItemByPathAsync(_initialPath);
+                AddHistory(_initialPath);
             }
         }
 
@@ -198,7 +155,7 @@ namespace YMM4FileExplorer
             string fullPath
         )
         {
-            var icon = await ShellIcon.GetSmallIconAsync(fullPath, true);
+            var icon = await ShellIcon.GetIconAsync(fullPath, true);
 
             return new StackPanel
             {
@@ -356,57 +313,148 @@ namespace YMM4FileExplorer
             }
         }
 
-
-        private async void DirectoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        private async Task UpdateTreeView(string path)
         {
-            if (_isNavigatingViaHistory)
+            if (!Directory.Exists(path)) return;
+
+            _isUpdatingTree = true;
+
+            DirectoryTree.Items.Clear();
+            var dirInfo = new DirectoryInfo(path);
+
+            if (dirInfo.Parent != null)
             {
-                return;
+                var parentItem = new TreeViewItem
+                {
+                    Header = "[...]",
+                    Tag = dirInfo.Parent.FullName
+                };
+                DirectoryTree.Items.Add(parentItem);
             }
+
+            var rootItem = new TreeViewItem
+            {
+                Header = await CreateTreeViewItemHeaderAsync(dirInfo.Name, dirInfo.FullName),
+                Tag = dirInfo.FullName,
+                IsExpanded = true
+            };
+            DirectoryTree.Items.Add(rootItem);
 
             try
             {
-                _watcher?.Dispose();
-                if (DirectoryTree.SelectedItem is TreeViewItem item)
+                var directories = await Task.Run(() =>
+                    dirInfo.GetDirectories()
+                           .Where(dir => FileExplorerSettings.Default.ShowHiddenFiles || !dir.Attributes.HasFlag(FileAttributes.Hidden))
+                           .ToList());
+
+                foreach (var dir in directories)
                 {
-                    string? path = item.Tag as string;
-                    if (Directory.Exists(path))
+                    var subItem = new TreeViewItem
                     {
-                        SearchTextBox.Text = string.Empty;
+                        Header = await CreateTreeViewItemHeaderAsync(dir.Name, dir.FullName),
+                        Tag = dir.FullName
+                    };
 
-                        _currentDirectory = path;
-                        await LoadFilesAsync(path);
-
-                        _watcher = new FileSystemWatcher(path)
+                    try
+                    {
+                        if (Directory.EnumerateDirectories(dir.FullName).Any())
                         {
-                            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
-                            EnableRaisingEvents = true,
-                        };
-
-                        _watcher.Created += OnFileSystemChanged;
-                        _watcher.Deleted += OnFileSystemChanged;
-                        _watcher.Renamed += OnFileSystemChanged;
-
-                        PathChanged?.Invoke(path);
-
-                        AddHistory(path);
+                            subItem.Items.Add(null);
+                        }
                     }
+                    catch (UnauthorizedAccessException) { /* アクセスできないフォルダは無視 */ }
+
+                    subItem.Expanded += Folder_Expanded;
+                    rootItem.Items.Add(subItem);
                 }
             }
-            catch (System.Exception ex)
+            catch (UnauthorizedAccessException)
             {
-                MessageBox.Show(
-                    $"選択したディレクトリが存在しないか、アクセスできません。\n{ex.Message}",
-                    "エラー",
-                    MessageBoxButton.OK
-                );
+                Debug.WriteLine($"アクセスが許可されていないフォルダ: {path}");
+            }
+
+            _isUpdatingTree = false;
+        }
+
+        private async void DirectoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (_isUpdatingTree || DirectoryTree.SelectedItem == null) return;
+            if (_isNavigatingWithFavorite) return;
+
+            if (DirectoryTree.SelectedItem is TreeViewItem item && item.Tag is string path)
+            {
+                if (item.Header as string == "[...]")
+                {
+                    if (FileExplorerSettings.Default.ShowSelectedFolderPath)
+                    {
+                        await UpdateTreeView(path);
+                        await HandlePathSelection(path, false);
+                    }
+                    else
+                    {
+                        await LoadDrivesAsync();
+                        await SelectTreeViewItemByPathAsync(path);
+                    }
+                    return;
+                }
+
+                if (FileExplorerSettings.Default.ShowSelectedFolderPath)
+                {
+                    await HandlePathSelection(path);
+                }
+                else
+                {
+                    if (_isNavigatingViaHistory) return;
+                    await HandlePathSelection(path);
+                }
+            }
+        }
+
+        private async void DirectoryTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (FileExplorerSettings.Default.ShowSelectedFolderPath)
+            {
+                if (DirectoryTree.SelectedItem is TreeViewItem item && item.Tag is string path)
+                {
+                    await UpdateTreeView(path);
+
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private async Task HandlePathSelection(string path, bool addToHistory = true)
+        {
+            if (!Directory.Exists(path)) return;
+
+            _watcher?.Dispose();
+            SearchTextBox.Text = string.Empty;
+            _currentDirectory = path;
+            await LoadFilesAsync(path);
+
+            _watcher = new FileSystemWatcher(path)
+            {
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
+                EnableRaisingEvents = true,
+            };
+            _watcher.Created += OnFileSystemChanged;
+            _watcher.Deleted += OnFileSystemChanged;
+            _watcher.Renamed += OnFileSystemChanged;
+
+            PathChanged?.Invoke(path);
+            if (addToHistory && !_isNavigatingViaHistory)
+            {
+                AddHistory(path);
             }
         }
 
         private async Task LoadFilesAsync(string path)
         {
             var fileCollection = new ObservableCollection<FileItem>();
-            FileList.ItemsSource = fileCollection;
+
+            DetailsListView.ItemsSource = fileCollection; // 詳細ビュー
+            IconListView.ItemsSource = fileCollection;  // アイコンビュー
+
             try
             {
                 await Task.Run(async () =>
@@ -422,7 +470,7 @@ namespace YMM4FileExplorer
                         )
                             continue;
 
-                        var icon = await ShellIcon.GetSmallIconAsync(dir, true);
+                        var icon = await ShellIcon.GetIconAsync(dir, true);
                         var fileItem = new FileItem
                         {
                             Name = info.Name,
@@ -431,6 +479,7 @@ namespace YMM4FileExplorer
                             LastWriteString = info.LastWriteTime.ToString("yyyy/MM/dd HH:mm"),
                             LastWriteTime = info.LastWriteTime,
                             Icon = icon,
+                            Thumbnail = icon,
                             IsDirectory = true,
                         };
 
@@ -448,7 +497,7 @@ namespace YMM4FileExplorer
                         if (!FileExplorerSettings.Default.ShowHiddenFiles && info.Attributes.HasFlag(FileAttributes.Hidden))
                             continue;
 
-                        var icon = await ShellIcon.GetSmallIconAsync(file, false);
+                        var icon = await ShellIcon.GetIconAsync(file, false);
                         var fileItem = new FileItem
                         {
                             Name = info.Name,
@@ -459,6 +508,7 @@ namespace YMM4FileExplorer
                             LastWriteString = info.LastWriteTime.ToString("yyyy/MM/dd HH:mm"),
                             LastWriteTime = info.LastWriteTime,
                             Icon = icon,
+                            Thumbnail= icon,
                             IsDirectory = false,
                         };
 
@@ -466,6 +516,8 @@ namespace YMM4FileExplorer
                         {
                             fileCollection.Add(fileItem);
                         });
+
+                        _ = LoadThumbnailForItemAsync(fileItem);
                     }
                 });
 
@@ -475,6 +527,31 @@ namespace YMM4FileExplorer
                 Debug.WriteLine($"ファイルの読み込みに失敗: {ex.Message}");
             }
         }
+
+
+        private static async Task LoadThumbnailForItemAsync(FileItem item)
+        {
+            try
+            {
+                if (item.IsDirectory || string.IsNullOrEmpty(item.FullPath))
+                    return;
+
+                var thumbnail = await ShellThumbnail.LoadCroppedThumbnailAsync(item.FullPath,thumbSize: 128);
+
+                if (thumbnail != null)
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        item.Thumbnail = thumbnail;
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"サムネイル取得失敗: {item.Name} - {ex.Message}");
+            }
+        }
+
 
         private async void OnFileSystemChanged(object sender, FileSystemEventArgs e)
         {
@@ -488,7 +565,7 @@ namespace YMM4FileExplorer
                     }
                 });
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.WriteLine(
                     $"ファイルシステムの変更を処理中にエラーが発生しました。: {ex.Message}"
@@ -531,7 +608,9 @@ namespace YMM4FileExplorer
                 if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
                     Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
                 {
-                    var selectedItems = FileList.SelectedItems;
+                    if (sender is not ListView listView) return;
+
+                    var selectedItems = listView.SelectedItems;
                     if (selectedItems != null && selectedItems.Count > 0 && _currentDirectory != null)
                     {
                         var filePaths = new List<string>();
@@ -547,7 +626,7 @@ namespace YMM4FileExplorer
                         if (filePaths.Count > 0)
                         {
                             DataObject data = new(DataFormats.FileDrop, filePaths.ToArray());
-                            DragDrop.DoDragDrop(FileList, data, DragDropEffects.Copy);
+                            DragDrop.DoDragDrop(listView, data, DragDropEffects.Copy);
                         }
                     }
                 }
@@ -584,7 +663,7 @@ namespace YMM4FileExplorer
 
         private void Sort(string sortBy, ListSortDirection direction)
         {
-            ICollectionView dataView = CollectionViewSource.GetDefaultView(FileList.ItemsSource);
+            ICollectionView dataView = CollectionViewSource.GetDefaultView(DetailsListView.ItemsSource);
             if (dataView is null)
                 return;
 
@@ -600,7 +679,7 @@ namespace YMM4FileExplorer
         {
             string arrow = direction == ListSortDirection.Ascending ? "▲" : "▼";
 
-            foreach (var column in ((GridView)FileList.View).Columns)
+            foreach (var column in ((GridView)DetailsListView.View).Columns)
             {
                 if (column.Header is GridViewColumnHeader ch &&
                     ch.Content is StackPanel panel &&
@@ -623,12 +702,22 @@ namespace YMM4FileExplorer
         #region プレビュー
         private async void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if (FileList.SelectedItem is not FileItem selectedItem || string.IsNullOrEmpty(selectedItem.FullPath))
+            if (sender is not ListView listView) return;
+
+            if (listView.SelectedItem is not FileItem selectedItem || string.IsNullOrEmpty(selectedItem.FullPath))
                 return;
 
             if (selectedItem.IsDirectory)
             {
-                await SelectTreeViewItemByPathAsync(selectedItem.FullPath);
+                if (FileExplorerSettings.Default.ShowSelectedFolderPath)
+                {
+                    await UpdateTreeView(selectedItem.FullPath);
+                    await HandlePathSelection(selectedItem.FullPath);
+                }
+                else
+                {
+                    await SelectTreeViewItemByPathAsync(selectedItem.FullPath);
+                }
             }
             else
             {
@@ -676,10 +765,13 @@ namespace YMM4FileExplorer
                                 Volume = FileExplorerSettings.Default.PreviewVolumePercentage / 100d,
                                 Stretch = Stretch.Uniform,
                                 LoadedBehavior = MediaState.Manual,
-                                UnloadedBehavior = MediaState.Manual
+                                UnloadedBehavior = MediaState.Manual,
+
+                                MaxWidth = 1280,
+                                MaxHeight = 1280,
                             };
-                            PreviewContent.Content = media;
                             media.Play();
+                            PreviewContent.Content = media;
                             break;
 
                         case ".mp3":
@@ -835,11 +927,17 @@ namespace YMM4FileExplorer
                 if (!string.IsNullOrEmpty(parentDirectory))
                 {
                     await LoadFilesAsync(parentDirectory);
-                    var fileItemToSelect = FileList.Items.OfType<FileItem>().FirstOrDefault(f => f.FullPath == searchTerm);
-                    if(fileItemToSelect != null)
+
+                    var fileItemToSelect = (DetailsListView.ItemsSource as IEnumerable<FileItem>)
+                              ?.FirstOrDefault(f => f.FullPath == searchTerm);
+
+                    if (fileItemToSelect != null)
                     {
-                        FileList.SelectedItem = fileItemToSelect;
-                        FileList.ScrollIntoView(fileItemToSelect);
+                        DetailsListView.SelectedItem = fileItemToSelect;
+                        DetailsListView.ScrollIntoView(fileItemToSelect);
+
+                        IconListView.SelectedItem = fileItemToSelect;
+                        IconListView.ScrollIntoView(fileItemToSelect);
                     }
                 }
                 this.Cursor = Cursors.Arrow;
@@ -863,7 +961,8 @@ namespace YMM4FileExplorer
             }
 
             var fileCollection = new ObservableCollection<FileItem>();
-            FileList.ItemsSource = fileCollection;
+            DetailsListView.ItemsSource = fileCollection; // 詳細ビュー
+            IconListView.ItemsSource = fileCollection;  // アイコンビュー
 
             try
             {
@@ -928,7 +1027,7 @@ namespace YMM4FileExplorer
                             if (!FileExplorerSettings.Default.ShowHiddenFiles && info.Attributes.HasFlag(FileAttributes.Hidden))
                                 continue;
 
-                            var icon = await ShellIcon.GetSmallIconAsync(file, false);
+                            var icon = await ShellIcon.GetIconAsync(file, false);
                             var fileItem = new FileItem
                             {
                                 Name = info.Name,
@@ -975,7 +1074,7 @@ namespace YMM4FileExplorer
                     if (!FileExplorerSettings.Default.ShowHiddenFiles && info.Attributes.HasFlag(FileAttributes.Hidden))
                         continue;
 
-                    var icon = await ShellIcon.GetSmallIconAsync(file, false);
+                    var icon = await ShellIcon.GetIconAsync(file, false);
                     var fileItem = new FileItem
                     {
                         Name = info.Name,
@@ -1069,7 +1168,15 @@ namespace YMM4FileExplorer
             _isNavigatingViaHistory = true;
 
             string pathToNavigate = _navigationHistory[_currentHistoryIndex];
-            await SelectTreeViewItemByPathAsync(pathToNavigate);
+
+            if (FileExplorerSettings.Default.ShowSelectedFolderPath)
+            {
+                await UpdateTreeView(pathToNavigate);
+            }
+            else
+            {
+                await SelectTreeViewItemByPathAsync(pathToNavigate);
+            }
 
             if (Directory.Exists(pathToNavigate))
             {
@@ -1106,6 +1213,115 @@ namespace YMM4FileExplorer
             {
                 ForwardButton_Click(sender, e);
                 e.Handled = true;
+            }
+        }
+        #endregion
+
+        #region モードの変更
+        private void DetailsView_Click(object sender, RoutedEventArgs e)
+        {
+            DetailsListView.Visibility = Visibility.Visible;
+            IconListView.Visibility = Visibility.Collapsed;
+        }
+
+        private void IconView_Click(object sender, RoutedEventArgs e)
+        {
+            DetailsListView.Visibility = Visibility.Collapsed;
+            IconListView.Visibility = Visibility.Visible;
+        }
+
+        private bool _isSelectionChanging = false;
+
+        private void ListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isSelectionChanging) return;
+
+            _isSelectionChanging = true;
+
+            var sourceListView = sender as ListView;
+            var targetListView = (sourceListView == DetailsListView) ? IconListView : DetailsListView;
+
+            targetListView.SelectedItems.Clear();
+            foreach (var item in sourceListView.SelectedItems)
+            {
+                targetListView.SelectedItems.Add(item);
+            }
+
+            if (sourceListView.SelectedItem != null)
+            {
+                targetListView.ScrollIntoView(sourceListView.SelectedItem);
+            }
+
+            _isSelectionChanging = false;
+        }
+        #endregion
+
+        #region お気に入り
+        private async void FavoritesComboBox_ValueChanged(object sender, EventArgs e)
+        {
+            if (FavoritesComboBox.Value is string path && !string.IsNullOrEmpty(path))
+            {
+                _isNavigatingWithFavorite = true;
+
+                if (Directory.Exists(path))
+                {
+                    if (FileExplorerSettings.Default.ShowSelectedFolderPath)
+                    {
+                        await UpdateTreeView(path);
+                        await HandlePathSelection(path);
+                    }
+                    else
+                    {
+                        await SelectTreeViewItemByPathAsync(path);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("このフォルダは存在しません。");
+                }
+
+                _isNavigatingWithFavorite = false;
+            }
+        }
+
+        private void DirectoryTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            if (DirectoryTree.SelectedItem is not TreeViewItem selectedItem || selectedItem.Tag is not string path)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            bool isFavorite = FileExplorerSettings.Default.Favorites.Any(f => f.FullPath.Equals(path, StringComparison.OrdinalIgnoreCase));
+
+            AddFavoriteMenuItem.Visibility = isFavorite ? Visibility.Collapsed : Visibility.Visible;
+            RemoveFavoriteMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void AddFavorite_Click(object sender, RoutedEventArgs e)
+        {
+            if (DirectoryTree.SelectedItem is TreeViewItem selectedItem && selectedItem.Tag is string path)
+            {
+                var dirInfo = new DirectoryInfo(path);
+                var newFavorite = new FavoriteItem { Name = dirInfo.Name, FullPath = path };
+
+                FileExplorerSettings.Default.Favorites.Add(newFavorite);
+                FileExplorerSettings.Default.Save();
+            }
+        }
+
+        private void RemoveFavorite_Click(object sender, RoutedEventArgs e)
+        {
+            if (DirectoryTree.SelectedItem is TreeViewItem selectedItem && selectedItem.Tag is string path)
+            {
+                var favoriteToRemove = FileExplorerSettings.Default.Favorites
+                    .FirstOrDefault(f => f.FullPath.Equals(path, StringComparison.OrdinalIgnoreCase));
+
+                if (favoriteToRemove != null)
+                {
+                    FileExplorerSettings.Default.Favorites.Remove(favoriteToRemove);
+                    FileExplorerSettings.Default.Save();
+                }
             }
         }
         #endregion

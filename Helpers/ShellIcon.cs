@@ -14,6 +14,7 @@ namespace YMM4FileExplorer.Helpers
         private static extern nint SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
 
         private const uint SHGFI_ICON = 0x000000100;
+        private const uint SHGFI_LARGEICON = 0x000000000;
         private const uint SHGFI_SMALLICON = 0x000000001;
         private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
         private const uint FILE_ATTRIBUTE_DIRECTORY = 0x10;
@@ -31,10 +32,10 @@ namespace YMM4FileExplorer.Helpers
             public string szTypeName;
         }
 
-        public static ImageSource? GetSmallIcon(string path, bool isDirectory)
+        public static ImageSource? GetIcon(string path, bool isDirectory)
         {
             var shinfo = new SHFILEINFO();
-            uint flags = SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES;
+            uint flags = SHGFI_ICON | SHGFI_USEFILEATTRIBUTES;
             uint attr = isDirectory ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_FILE;
 
             SHGetFileInfo(path, attr, ref shinfo, (uint)Marshal.SizeOf(shinfo), flags);
@@ -60,9 +61,9 @@ namespace YMM4FileExplorer.Helpers
             }
         }
 
-        public static async Task<ImageSource?> GetSmallIconAsync(string path, bool isDirectory)
+        public static async Task<ImageSource?> GetIconAsync(string path, bool isDirectory)
         {
-            return await Task.Run(() => GetSmallIcon(path, isDirectory));
+            return await Task.Run(() => GetIcon(path, isDirectory));
         }
     }
 }

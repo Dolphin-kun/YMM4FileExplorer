@@ -14,6 +14,9 @@ namespace YMM4FileExplorer
         public ObservableCollection<FileExplorerTabControlViewModel> Tabs { get; set; }
         bool isLoaded = false;
 
+        //v4.45.0.0
+        static bool _isInitialContentLoaded = false;
+
         public FileExplorerTabControl()
         {
             InitializeComponent();
@@ -59,19 +62,45 @@ namespace YMM4FileExplorer
 
         }
 
-        private Task LoadTabsStateAsync()
+        private async Task LoadTabsStateAsync()
         {
+            if (_isInitialContentLoaded)
+                return;
+
+            if (FileExplorerSettings.Default.IsCheckVersion && await GetVersion.CheckVersionAsync("YMM4エクスプローラー"))
+            {
+                string url =
+                    "https://ymm4-info.net/ymme/YMM4%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%97%E3%83%AD%E3%83%BC%E3%83%A9%E3%83%BC%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3";
+                var result = MessageBox.Show(
+                    $"新しいバージョンがあります。\n\n最新バージョンを確認しますか？\nOKを押すと配布サイトが開きます。\n{url}",
+                    "YMM4エクスプローラープラグイン",
+                    MessageBoxButton.OKCancel);
+
+                if (result == MessageBoxResult.OK)
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = url,
+                        UseShellExecute = true
+                    });
+                }
+            }
+            else
+            {
+                Debug.WriteLine("最新のバージョンです");
+            }
+
             var savedTabs = FileExplorerSettings.Default.SavedTabs;
             if (savedTabs == null || savedTabs.Count == 0)
             {
                 var newTab = Dispatcher.Invoke(() => AddNewTab("新しいタブ", "C:\\"));
                 MainTabControl.SelectedItem = newTab;
-                return Task.CompletedTask;
+                return ;
             }
 
             try
             {
-                Dispatcher.Invoke(() =>
+                await Dispatcher.InvokeAsync(() =>
                 {
                     foreach (var tabState in savedTabs)
                     {
@@ -89,14 +118,14 @@ namespace YMM4FileExplorer
             }
             catch
             {
-                Dispatcher.Invoke(() =>
+                await Dispatcher.InvokeAsync(() =>
                 {
                     Tabs.Clear();
                     AddNewTab("新しいタブ (復元失敗)", "C:\\");
                 });
             }
 
-            return Task.CompletedTask;
+            _isInitialContentLoaded = true;
         }
 
         private Task SaveTabsStateAsync()
