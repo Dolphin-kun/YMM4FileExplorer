@@ -14,7 +14,12 @@
 
     <UserControl.Resources>
         <!-- 詳細ListView -->
+        <ContextMenu x:Key="ItemContextMenu">
+            <MenuItem Header="大きく表示" Click="ShowLargePreview_Click"/>
+        </ContextMenu>
+
         <Style x:Key="DetailsViewItemContainerStyle" TargetType="ListViewItem">
+            <Setter Property="ContextMenu" Value="{StaticResource ItemContextMenu}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewItem">
@@ -40,6 +45,7 @@
         </Style>
 
         <Style x:Key="IconViewItemContainerStyle" TargetType="ListViewItem">
+            <Setter Property="ContextMenu" Value="{StaticResource ItemContextMenu}"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
 
@@ -158,6 +164,8 @@
             <ColumnDefinition Width="250"/>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
+            <ColumnDefinition x:Name="PreviewColumnSplitter" Width="Auto"/>
+            <ColumnDefinition x:Name="PreviewColumn" Width="Auto"/>
         </Grid.ColumnDefinitions>
 
 
@@ -264,6 +272,53 @@
                       Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
             </ListView>
         </Grid>
+
+        <GridSplitter x:Name="LargePreviewSplitter"
+                      Grid.Row="1" Grid.Column="3"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Stretch"
+                      Width="5"
+                      Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+                      Visibility="Collapsed"/>
+
+        <DockPanel x:Name="LargePreviewPane"
+                   Grid.Row="1" Grid.Column="4"
+                   MinWidth="200"
+                   Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                   Visibility="Collapsed">
+            <Border BorderBrush="{DynamicResource {x:Static theme:YMM4Colors.IconBrushKey}}" BorderThickness="0.5" Margin="5,0,5,5">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0" Margin="5,5,5,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="PreviewName" Grid.Column="0" FontWeight="Bold" TextWrapping="Wrap" VerticalAlignment="Top"/>
+                        <Button Content="✕" Click="ClosePreview_Click" Grid.Column="1" Padding="5,2" ToolTip="閉じる" VerticalAlignment="Top"/>
+                    </Grid>
+
+                    <ContentControl x:Name="PreviewContentHost" Grid.Row="1" />
+
+                    <Grid x:Name="MediaControlsPanel" Grid.Row="2" Margin="5,0,5,5" Visibility="Collapsed" >
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="PlayButton" Content="▶" Click="PlayButton_Click" Width="40" ToolTip="再生" />
+                            <Button x:Name="PauseButton" Content="■" Click="PauseButton_Click" Width="40" ToolTip="一時停止" Visibility="Collapsed" />
+                        </StackPanel>
+
+                    </Grid>
+                </Grid>
+            </Border>
+        </DockPanel>
 
 
         <Popup x:Name="PreviewPopup"

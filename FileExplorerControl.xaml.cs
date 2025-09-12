@@ -36,6 +36,8 @@ namespace YMM4FileExplorer
 
         //preview
         private readonly DispatcherTimer _timer;
+        private readonly DispatcherTimer _largePreviewTimer;
+        private MediaElement? _largePreviewMediaElement;
 
         //Save
         private readonly string _initialPath;
@@ -62,16 +64,15 @@ namespace YMM4FileExplorer
 
             PreviewPopup.Closed += PreviewPopup_Closed;
 
-            _timer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(200)
-            };
+            // Popupのタイマー
+            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
             _timer.Tick += Timer_Tick;
 
-            _searchTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(300)
-            };
+            _largePreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            _largePreviewTimer.Tick += LargePreviewTimer_Tick;
+
+            // 検索時のタイマー
+            _searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             _searchTimer.Tick += SearchTimer_Tick;
         }
 
@@ -508,7 +509,7 @@ namespace YMM4FileExplorer
                             LastWriteString = info.LastWriteTime.ToString("yyyy/MM/dd HH:mm"),
                             LastWriteTime = info.LastWriteTime,
                             Icon = icon,
-                            Thumbnail= icon,
+                            Thumbnail = icon,
                             IsDirectory = false,
                         };
 
@@ -536,7 +537,7 @@ namespace YMM4FileExplorer
                 if (item.IsDirectory || string.IsNullOrEmpty(item.FullPath))
                     return;
 
-                var thumbnail = await ShellThumbnail.LoadCroppedThumbnailAsync(item.FullPath,thumbSize: 128);
+                var thumbnail = await ShellThumbnail.LoadCroppedThumbnailAsync(item.FullPath, thumbSize: 128);
 
                 if (thumbnail != null)
                 {
@@ -722,15 +723,14 @@ namespace YMM4FileExplorer
             else
             {
                 _timer.Stop();
-                if (PreviewContent.Content is MediaElement oldMedia)
+                if (PreviewContent.Content is Grid oldGrid)
+                {
+                    var mediaToStop = oldGrid.Children.OfType<MediaElement>().FirstOrDefault();
+                    mediaToStop?.Close();
+                }
+                else if (PreviewContent.Content is MediaElement oldMedia)
                 {
                     oldMedia.Close();
-                }
-                else if (PreviewContent.Content is Grid grid &&
-                         grid.Children.Count > 1 &&
-                         grid.Children[1] is MediaElement audioMedia)
-                {
-                    audioMedia.Close();
                 }
                 PreviewContent.Content = null;
 
@@ -759,7 +759,8 @@ namespace YMM4FileExplorer
                         case ".wmv":
                         case ".avi":
                         case ".mov":
-                            var media = new MediaElement
+                            var videoSlider = new Slider { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(5) };
+                            var videoMedia = new MediaElement
                             {
                                 Source = new Uri(fullPath),
                                 Volume = FileExplorerSettings.Default.PreviewVolumePercentage / 100d,
@@ -770,8 +771,38 @@ namespace YMM4FileExplorer
                                 MaxWidth = 1280,
                                 MaxHeight = 1280,
                             };
-                            media.Play();
-                            PreviewContent.Content = media;
+
+                            videoMedia.MediaFailed += (s, args) =>
+                            {
+                                var textBlock = new TextBlock
+                                {
+                                    Text = "再生に失敗しました。\nコーデックが標準のものではない可能性があります。",
+                                    TextWrapping = TextWrapping.Wrap,
+                                    VerticalAlignment = VerticalAlignment.Center,
+                                    HorizontalAlignment = HorizontalAlignment.Center,
+                                    Margin = new Thickness(10)
+                                };
+                                PreviewContent.Content = textBlock;
+                            };
+
+                            videoMedia.MediaOpened += (s, args) =>
+                            {
+                                if (videoMedia.NaturalDuration.HasTimeSpan)
+                                {
+                                    videoSlider.Maximum = videoMedia.NaturalDuration.TimeSpan.TotalSeconds;
+                                }
+                            };
+
+                            videoSlider.PreviewMouseDown += Slider_PreviewMouseDown;
+                            videoSlider.PreviewMouseUp += Slider_PreviewMouseUp;
+
+                            var videoGrid = new Grid();
+                            videoGrid.Children.Add(videoMedia);
+                            videoGrid.Children.Add(videoSlider);
+
+                            PreviewContent.Content = videoGrid;
+                            videoMedia.Play();
+                            _timer.Start();
                             break;
 
                         case ".mp3":
@@ -783,6 +814,19 @@ namespace YMM4FileExplorer
                                 Volume = FileExplorerSettings.Default.PreviewVolumePercentage / 100d,
                                 LoadedBehavior = MediaState.Manual,
                                 UnloadedBehavior = MediaState.Manual
+                            };
+
+                            audioMedia.MediaFailed += (s, args) =>
+                            {
+                                var textBlock = new TextBlock
+                                {
+                                    Text = "再生に失敗しました。\nコーデックが標準のものではない可能性があります。",
+                                    TextWrapping = TextWrapping.Wrap,
+                                    VerticalAlignment = VerticalAlignment.Center,
+                                    HorizontalAlignment = HorizontalAlignment.Center,
+                                    Margin = new Thickness(10)
+                                };
+                                PreviewContent.Content = textBlock;
                             };
 
                             audioMedia.MediaOpened += (s, args) =>
@@ -845,12 +889,12 @@ namespace YMM4FileExplorer
 
         private void Timer_Tick(object? sender, EventArgs e)
         {
-            if (PreviewContent.Content is Grid grid &&
-                grid.Children.Count == 2 &&
-                grid.Children[0] is Slider slider &&
-                grid.Children[1] is MediaElement media)
+            if (PreviewContent.Content is Grid grid)
             {
-                if (!slider.IsMouseCaptured)
+                var slider = grid.Children.OfType<Slider>().FirstOrDefault();
+                var media = grid.Children.OfType<MediaElement>().FirstOrDefault();
+
+                if (slider != null && media != null && !slider.IsMouseCaptured)
                 {
                     slider.Value = media.Position.TotalSeconds;
                 }
@@ -860,17 +904,15 @@ namespace YMM4FileExplorer
         private void PreviewPopup_Closed(object? sender, EventArgs e)
         {
             _timer.Stop();
-            if (PreviewContent.Content is MediaElement media)
+
+            if (PreviewContent.Content is Grid grid)
+            {
+                var mediaToStop = grid.Children.OfType<MediaElement>().FirstOrDefault();
+                mediaToStop?.Close();
+            }
+            else if (PreviewContent.Content is MediaElement media)
             {
                 media.Close();
-            }
-            else if (
-                PreviewContent.Content is Grid grid
-                && grid.Children.Count == 2
-                && grid.Children[1] is MediaElement audioMedia
-            )
-            {
-                audioMedia.Close();
             }
 
             PreviewContent.Content = null;
@@ -894,13 +936,273 @@ namespace YMM4FileExplorer
 
         private void Slider_PreviewMouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (sender is Slider slider &&
-                PreviewContent.Content is Grid grid &&
-                grid.Children.Count > 1 &&
-                grid.Children[1] is MediaElement media)
+            if (sender is Slider slider && PreviewContent.Content is Grid grid)
             {
-                media.Position = TimeSpan.FromSeconds(slider.Value);
-                _timer.Start();
+                var media = grid.Children.OfType<MediaElement>().FirstOrDefault();
+                if (media != null)
+                {
+                    media.Position = TimeSpan.FromSeconds(slider.Value);
+                    _timer.Start();
+                }
+            }
+        }
+
+        // プレビューウィンドウ
+        private async void ShowLargePreview_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem menuItem || menuItem.DataContext is not FileItem selectedItem)
+            {
+                return;
+            }
+
+            _largePreviewTimer.Stop();
+            if (PreviewContentHost.Content is Grid grid && grid.Children.OfType<MediaElement>().FirstOrDefault() is MediaElement oldMedia)
+            {
+                oldMedia.Close();
+            }
+            PreviewContentHost.Content = null;
+
+            PreviewName.Text = selectedItem.Name;
+            PreviewColumn.Width = new GridLength(300);
+            LargePreviewSplitter.Visibility = Visibility.Visible;
+            LargePreviewPane.Visibility = Visibility.Visible;
+
+            if (selectedItem.IsDirectory || string.IsNullOrEmpty(selectedItem.FullPath))
+            {
+                PreviewContentHost.Content = new Image { Source = selectedItem.Thumbnail, Stretch = Stretch.Uniform };
+                return;
+            }
+
+            _largePreviewMediaElement = null;
+            MediaControlsPanel.Visibility = Visibility.Collapsed;
+            PlayButton.Visibility = Visibility.Visible;
+            PauseButton.Visibility = Visibility.Collapsed;
+
+            var existingSlider = MediaControlsPanel.Children.OfType<Slider>().FirstOrDefault();
+            if (existingSlider != null)
+            {
+                MediaControlsPanel.Children.Remove(existingSlider);
+            }
+
+            var extension = Path.GetExtension(selectedItem.FullPath).ToLowerInvariant();
+            switch (extension)
+            {
+                // --- 画像ファイル ---
+                case ".png":
+                case ".jpg":
+                case ".jpeg":
+                case ".bmp":
+                case ".gif":
+                    var image = new Image { Source = selectedItem.Thumbnail, Stretch = Stretch.Uniform };
+                    PreviewContentHost.Content = image;
+
+                    const int largeThumbSize = 512;
+                    var largeThumbnail = await ShellThumbnail.LoadCroppedThumbnailAsync(selectedItem.FullPath, thumbSize: largeThumbSize);
+                    if (largeThumbnail != null)
+                    {
+                        image.Source = largeThumbnail;
+                    }
+                    break;
+
+                // --- 動画ファイル ---
+                case ".mp4":
+                case ".wmv":
+                case ".avi":
+                case ".mov":
+                    var videoSlider = new Slider { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10) };
+                    var videoMedia = new MediaElement
+                    {
+                        Source = new Uri(selectedItem.FullPath),
+                        Volume = FileExplorerSettings.Default.PreviewVolumePercentage / 100d,
+                        Stretch = Stretch.Uniform,
+                        LoadedBehavior = MediaState.Manual,
+                        UnloadedBehavior = MediaState.Manual,
+                    };
+
+                    _largePreviewMediaElement = videoMedia;
+                    MediaControlsPanel.Visibility = Visibility.Visible;
+                    PlayButton.Visibility = Visibility.Collapsed;
+                    PauseButton.Visibility = Visibility.Visible;
+                    videoMedia.MediaEnded += (s, args) =>
+                    {
+                        PlayButton.Visibility = Visibility.Visible;
+                        PauseButton.Visibility = Visibility.Collapsed;
+                        _largePreviewMediaElement?.Stop();
+                    };
+
+                    videoMedia.MediaFailed += (s, args) =>
+                    {
+                        var textBlock = new TextBlock
+                        {
+                            Text = "再生に失敗しました。\nコーデックが標準のものではない可能性があります。",
+                            TextWrapping = TextWrapping.Wrap,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            HorizontalAlignment = HorizontalAlignment.Center,
+                            Margin = new Thickness(10)
+                        };
+                        PreviewContentHost.Content = textBlock;
+                    };
+
+                    videoMedia.MediaOpened += (s, args) =>
+                    {
+                        if (videoMedia.NaturalDuration.HasTimeSpan)
+                        {
+                            videoSlider.Maximum = videoMedia.NaturalDuration.TimeSpan.TotalSeconds;
+                        }
+                    };
+
+                    videoSlider.PreviewMouseDown += LargePreviewSlider_PreviewMouseDown;
+                    videoSlider.PreviewMouseUp += LargePreviewSlider_PreviewMouseUp;
+
+                    Grid.SetColumn(videoSlider, 1);
+                    MediaControlsPanel.Children.Add(videoSlider);
+
+                    var videoGrid = new Grid();
+                    videoGrid.Children.Add(videoMedia);
+                    PreviewContentHost.Content = videoGrid;
+
+                    videoMedia.Play();
+                    _largePreviewTimer.Start();
+                    break;
+
+                // --- 音声ファイル ---
+                case ".mp3":
+                case ".wav":
+                    var audioSlider = new Slider { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10) };
+                    var audioMedia = new MediaElement
+                    {
+                        Source = new Uri(selectedItem.FullPath),
+                        Volume = FileExplorerSettings.Default.PreviewVolumePercentage / 100d,
+                        LoadedBehavior = MediaState.Manual,
+                        UnloadedBehavior = MediaState.Manual,
+                    };
+
+                    var iconImage = new Image
+                    {
+                        Source = selectedItem.Icon,
+                        Width = 64,
+                        Height = 64,
+                        Stretch = Stretch.Uniform,
+                        Opacity = 0.3
+                    };
+
+                    _largePreviewMediaElement = audioMedia;
+                    MediaControlsPanel.Visibility = Visibility.Visible;
+                    PlayButton.Visibility = Visibility.Collapsed;
+                    PauseButton.Visibility = Visibility.Visible;
+                    audioMedia.MediaEnded += (s, args) =>
+                    {
+                        PlayButton.Visibility = Visibility.Visible;
+                        PauseButton.Visibility = Visibility.Collapsed;
+                        _largePreviewMediaElement?.Stop();
+                    };
+
+                    audioMedia.MediaFailed += (s, args) =>
+                    {
+                        var textBlock = new TextBlock
+                        {
+                            Text = "再生に失敗しました。\nコーデックが標準のものではない可能性があります。",
+                            TextWrapping = TextWrapping.Wrap,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            HorizontalAlignment = HorizontalAlignment.Center,
+                            Margin = new Thickness(10)
+                        };
+                        PreviewContentHost.Content = textBlock;
+                    };
+
+                    audioMedia.MediaOpened += (s, args) =>
+                    {
+                        if (audioMedia.NaturalDuration.HasTimeSpan)
+                        {
+                            audioSlider.Maximum = audioMedia.NaturalDuration.TimeSpan.TotalSeconds;
+                        }
+                    };
+
+                    audioSlider.PreviewMouseDown += LargePreviewSlider_PreviewMouseDown;
+                    audioSlider.PreviewMouseUp += LargePreviewSlider_PreviewMouseUp;
+
+                    Grid.SetColumn(audioSlider, 1);
+                    MediaControlsPanel.Children.Add(audioSlider);
+
+                    var audioGrid = new Grid();
+                    audioGrid.Children.Add(iconImage);
+                    audioGrid.Children.Add(audioMedia);
+                    PreviewContentHost.Content = audioGrid;
+
+                    audioMedia.Play();
+                    _largePreviewTimer.Start();
+                    break;
+
+                // --- それ以外のファイル ---
+                default:
+                    PreviewContentHost.Content = new Image { Source = selectedItem.Icon, Stretch = Stretch.Uniform };
+                    break;
+            }
+        }
+
+        private void ClosePreview_Click(object sender, RoutedEventArgs e)
+        {
+            _largePreviewTimer.Stop();
+
+            if (_largePreviewMediaElement != null)
+            {
+                _largePreviewMediaElement.Close();
+                _largePreviewMediaElement = null;
+            }
+
+            var existingSlider = MediaControlsPanel.Children.OfType<Slider>().FirstOrDefault();
+            if (existingSlider != null)
+            {
+                MediaControlsPanel.Children.Remove(existingSlider);
+            }
+
+            PreviewContentHost.Content = null;
+
+            LargePreviewPane.Visibility = Visibility.Collapsed;
+            LargePreviewSplitter.Visibility = Visibility.Collapsed;
+            PreviewColumn.Width = new GridLength(0, GridUnitType.Auto);
+        }
+
+        private void LargePreviewTimer_Tick(object? sender, EventArgs e)
+        {
+            var slider = MediaControlsPanel.Children.OfType<Slider>().FirstOrDefault();
+            if (_largePreviewMediaElement != null && slider != null && !slider.IsMouseCaptured)
+            {
+                slider.Value = _largePreviewMediaElement.Position.TotalSeconds;
+            }
+        }
+
+        private void LargePreviewSlider_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            _largePreviewTimer.Stop();
+        }
+
+        private void LargePreviewSlider_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Slider slider && _largePreviewMediaElement != null)
+            {
+                _largePreviewMediaElement.Position = TimeSpan.FromSeconds(slider.Value);
+                _largePreviewTimer.Start();
+            }
+        }
+
+        private void PlayButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_largePreviewMediaElement != null)
+            {
+                _largePreviewMediaElement.Play();
+                PlayButton.Visibility = Visibility.Collapsed;
+                PauseButton.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void PauseButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_largePreviewMediaElement != null)
+            {
+                _largePreviewMediaElement.Pause();
+                PlayButton.Visibility = Visibility.Visible;
+                PauseButton.Visibility = Visibility.Collapsed;
             }
         }
         #endregion
