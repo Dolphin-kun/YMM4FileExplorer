@@ -1,38 +1,16 @@
-﻿using System.ComponentModel;
-using System.Runtime.CompilerServices;
+﻿using YukkuriMovieMaker.Commons;
 
 namespace YMM4FileExplorer.ViewModel
 {
-    public class FileExplorerTabControlViewModel : INotifyPropertyChanged
+    public class FileExplorerTabControlViewModel : Bindable
     {
         public string Id { get; }
+
         private string _header;
-        public string Header
-        {
-            get => _header;
-            set
-            {
-                if (_header != value)
-                {
-                    _header = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
+        public string Header { get => _header; set => Set(ref _header, value); }
 
         private string _path;
-        public string Path
-        {
-            get => _path;
-            set
-            {
-                if (_path != value)
-                {
-                    _path = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
+        public string Path { get => _path; set => Set(ref _path, value); }
 
         public object Content { get; }
 
@@ -42,12 +20,6 @@ namespace YMM4FileExplorer.ViewModel
             _header = header;
             _path = path;
             Content = content;
-        }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }

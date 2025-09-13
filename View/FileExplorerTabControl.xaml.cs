@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using YMM4FileExplorer.Model;
@@ -11,26 +12,22 @@ namespace YMM4FileExplorer
 {
     public partial class FileExplorerTabControl : UserControl
     {
-        public ObservableCollection<FileExplorerTabControlViewModel> Tabs { get; set; }
-        bool isLoaded = false;
-
-        //v4.45.0.0
-        static bool _isInitialContentLoaded = false;
+        public ObservableCollection<FileExplorerTabControlViewModel> Tabs { get; set; } = [];
 
         public FileExplorerTabControl()
         {
             InitializeComponent();
 
-            Tabs = [];
             MainTabControl.ItemsSource = Tabs;
 
-            FileExplorerTabControl_Loaded();
+            this.Loaded += FileExplorerTabControl_Loaded;
+
+
             this.Unloaded += FileExplorerTabControl_Unloaded;
         }
-
         #region 状態の保存と復元
 
-        private async void FileExplorerTabControl_Loaded()
+        private async void FileExplorerTabControl_Loaded(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -44,28 +41,19 @@ namespace YMM4FileExplorer
 
         private async void FileExplorerTabControl_Unloaded(object sender, RoutedEventArgs e)
         {
-            if (!isLoaded)
+            try
             {
-                isLoaded = true;
+                await SaveTabsStateAsync();
             }
-            else
+            catch (Exception ex)
             {
-                try
-                {
-                    await SaveTabsStateAsync();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine(ex.Message);
-                }
+                Debug.WriteLine(ex.Message);
             }
-
         }
 
         private async Task LoadTabsStateAsync()
         {
-            if (_isInitialContentLoaded)
-                return;
+            if (Tabs.Any()) return;
 
             if (FileExplorerSettings.Default.IsCheckVersion && await GetVersion.CheckVersionAsync("YMM4エクスプローラー"))
             {
@@ -95,37 +83,42 @@ namespace YMM4FileExplorer
             {
                 var newTab = Dispatcher.Invoke(() => AddNewTab("新しいタブ", "C:\\"));
                 MainTabControl.SelectedItem = newTab;
-                return ;
+                return;
             }
 
-            try
+            await Dispatcher.InvokeAsync(() =>
             {
-                await Dispatcher.InvokeAsync(() =>
+                foreach (var tabState in savedTabs)
                 {
-                    foreach (var tabState in savedTabs)
+                    try
                     {
-                        AddNewTab(tabState.Header, tabState.Path, tabState.Id);
+                        if (Directory.Exists(tabState.Path))
+                        {
+                            AddNewTab(tabState.Header, tabState.Path, tabState.Id);
+                        }
+                        else
+                        {
+                            AddNewTab($"{tabState.Header} (パス無効)", "C:\\", tabState.Id);
+                        }
                     }
+                    catch (Exception ex)
+                    {
+                        AddNewTab($"{tabState.Header} (復元失敗)", "C:\\", tabState.Id);
+                    }
+                }
 
-                    var lastSelectedId = FileExplorerSettings.Default.LastSelectedTabId;
-
-                    var tabToSelect = string.IsNullOrEmpty(lastSelectedId)
-                        ? Tabs.FirstOrDefault()
-                        : Tabs.FirstOrDefault(vm => vm.Id == lastSelectedId);
-
-                    MainTabControl.SelectedItem = tabToSelect ?? Tabs.FirstOrDefault();
-                });
-            }
-            catch
-            {
-                await Dispatcher.InvokeAsync(() =>
+                if (Tabs.Count == 0)
                 {
-                    Tabs.Clear();
-                    AddNewTab("新しいタブ (復元失敗)", "C:\\");
-                });
-            }
+                    AddNewTab("新しいタブ", "C:\\");
+                }
 
-            _isInitialContentLoaded = true;
+                var lastSelectedId = FileExplorerSettings.Default.LastSelectedTabId;
+                var tabToSelect = string.IsNullOrEmpty(lastSelectedId)
+                    ? Tabs.FirstOrDefault()
+                    : Tabs.FirstOrDefault(vm => vm.Id == lastSelectedId);
+
+                MainTabControl.SelectedItem = tabToSelect ?? Tabs.FirstOrDefault();
+            });
         }
 
         private Task SaveTabsStateAsync()

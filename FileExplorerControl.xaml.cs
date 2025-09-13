@@ -318,10 +318,17 @@ namespace YMM4FileExplorer
         {
             if (!Directory.Exists(path)) return;
 
-            _isUpdatingTree = true;
-
-            DirectoryTree.Items.Clear();
+           
             var dirInfo = new DirectoryInfo(path);
+            if (dirInfo.Parent == null)
+            {
+                await LoadDrivesAsync();
+                await SelectTreeViewItemByPathAsync(path);
+                return;
+            }
+
+            _isUpdatingTree = true;
+            DirectoryTree.Items.Clear();
 
             if (dirInfo.Parent != null)
             {
