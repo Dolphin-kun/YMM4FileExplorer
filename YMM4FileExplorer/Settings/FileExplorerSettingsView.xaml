@@ -1,0 +1,76 @@
+﻿<UserControl x:Class="YMM4FileExplorer.Settings.FileExplorerSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:YMM4FileExplorer.Settings"
+             xmlns:theme="clr-namespace:YukkuriMovieMaker.Theme;assembly=YukkuriMovieMaker.Plugin"
+             xmlns:c="clr-namespace:YukkuriMovieMaker.Controls;assembly=YukkuriMovieMaker.Controls"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+
+    <StackPanel Focusable="True">
+        <Expander Header="プラグイン設定" IsExpanded="True">
+            <Border BorderBrush="{DynamicResource {x:Static theme:YMM4Colors.IconBorderBrushKey}}" BorderThickness="0.5" Margin="5" Padding="5" CornerRadius="4">
+                <StackPanel>
+                    <Grid>
+                        <Label Content="現在のバージョン" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="VersionTextBlock"
+                           HorizontalAlignment="Right" 
+                           VerticalAlignment="Center"
+                           Opacity="0.7"/>
+                    </Grid>
+                    <Grid>
+                        <Label Content="起動時にアップデートを確認する"/>
+                        <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=IsCheckVersion}" HorizontalAlignment="Right"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Expander>
+
+        <Expander Header="YMM4エクスプローラー" IsExpanded="True">
+            <StackPanel>
+                <Grid>
+                    <Label Content="隠しファイルを表示する"/>
+                    <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=ShowHiddenFiles}" HorizontalAlignment="Right"/>
+                </Grid>
+                <Grid>
+                    <Label Content="フォルダ選択時に表示を移動する"/>
+                    <c:ToggleSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=ShowSelectedFolderPath}" HorizontalAlignment="Right"/>
+                </Grid>
+            </StackPanel>
+        </Expander>
+
+        <Expander Header="プレビュー" IsExpanded="True">
+            <StackPanel>
+                <Grid>
+                    <Label Content="プレビューの音量" VerticalAlignment="Center" Grid.Column="0"/>
+                    <c:TextBoxSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=PreviewVolumePercentage}" 
+                                 DefaultValue="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=PreviewVolumePercentage}" 
+                                 StringFormat="F0" 
+                                 Unit="%"
+                                 DefaultMin="0"
+                                 DefaultMax="100"
+                                 Min="0"
+                                 Max="200"
+                                 HorizontalAlignment="Right"
+                                 Width="200"/>
+                </Grid>
+                <Grid>
+                    <Label Content="プレビューの倍率" VerticalAlignment="Center" Grid.Column="0"/>
+                    <c:TextBoxSlider Value="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=PreviewSizeMultiplier}" 
+                                     DefaultValue="{Binding Source={x:Static local:FileExplorerSettings.Default},Path=PreviewSizeMultiplier}" 
+                                     StringFormat="F0" 
+                                     Unit="%"
+                                     DefaultMin="0"
+                                     DefaultMax="100"
+                                     Min="0"
+                                     Max="300"
+                                     HorizontalAlignment="Right"
+                                     Width="200"/>
+                </Grid>
+            </StackPanel>
+        </Expander>
+    </StackPanel>
+
+</UserControl>
