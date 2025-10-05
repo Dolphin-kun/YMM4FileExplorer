@@ -53,14 +53,37 @@ namespace YMM4FileExplorer
         private readonly DispatcherTimer _searchTimer;
         private CancellationTokenSource? _searchCts;
 
+        // Commands
+        public ActionCommand GoHomeCommand { get; }
+
         public FileExplorerControl(string initialPath = "C:\\")
         {
             InitializeComponent();
-
             _initialPath = initialPath;
+            this.DataContext = this;
 
             FileExplorerControl_Loaded();
             this.Unloaded += FileExplorerControl_Unloaded;
+
+            GoHomeCommand = new ActionCommand(_=> true, async _ =>
+            {
+                string? targetPath = string.IsNullOrEmpty(_currentDirectory)
+                    ? _initialPath
+                    : Path.GetPathRoot(_currentDirectory);
+
+                if (string.IsNullOrEmpty(targetPath)) return;
+                if (string.Equals(_currentDirectory, targetPath, StringComparison.OrdinalIgnoreCase)) return;
+
+                if (FileExplorerSettings.Default.ShowSelectedFolderPath)
+                {
+                    await UpdateTreeView(targetPath);
+                    await HandlePathSelection(targetPath);
+                }
+                else
+                {
+                    await SelectTreeViewItemByPathAsync(targetPath);
+                }
+            });
 
             PreviewPopup.Closed += PreviewPopup_Closed;
 
@@ -386,6 +409,7 @@ namespace YMM4FileExplorer
 
         private async void DirectoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
+            if (Mouse.RightButton == MouseButtonState.Pressed) return;
             if (_isUpdatingTree || DirectoryTree.SelectedItem == null) return;
             if (_isNavigatingWithFavorite) return;
 
@@ -707,6 +731,19 @@ namespace YMM4FileExplorer
             }
         }
 
+        private void DirectoryTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var hitTestResult = VisualTreeHelper.HitTest(DirectoryTree, e.GetPosition(DirectoryTree));
+            if (hitTestResult == null) return;
+
+            var targetItem = FindAncestor<TreeViewItem>(hitTestResult.VisualHit);
+
+            if (targetItem != null)
+            {
+                targetItem.IsSelected = true;
+            }
+        }
+
         #region プレビュー
         private async void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
@@ -752,7 +789,6 @@ namespace YMM4FileExplorer
                         case ".jpg":
                         case ".jpeg":
                         case ".bmp":
-                        case ".gif":
                             var bitmap = await LoadImageAsync(fullPath);
                             var image = new Image
                             {
@@ -766,17 +802,27 @@ namespace YMM4FileExplorer
                         case ".wmv":
                         case ".avi":
                         case ".mov":
+                        case ".gif":
                             var videoSlider = new Slider { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(5) };
                             var videoMedia = new MediaElement
                             {
-                                Source = new Uri(fullPath),
                                 Volume = FileExplorerSettings.Default.PreviewVolumePercentage / 100d,
                                 Stretch = Stretch.Uniform,
                                 LoadedBehavior = MediaState.Manual,
                                 UnloadedBehavior = MediaState.Manual,
-
                                 MaxWidth = 1280,
                                 MaxHeight = 1280,
+                                Visibility = Visibility.Collapsed,
+                            };
+
+                            var progressBar = new ProgressBar
+                            {
+                                IsIndeterminate = true,
+                                Width = 50,
+                                Height = 50,
+                                Style = (Style)FindResource("CircularProgressBar"),
+                                HorizontalAlignment = HorizontalAlignment.Center,
+                                VerticalAlignment = VerticalAlignment.Center
                             };
 
                             videoMedia.MediaFailed += (s, args) =>
@@ -794,6 +840,9 @@ namespace YMM4FileExplorer
 
                             videoMedia.MediaOpened += (s, args) =>
                             {
+                                progressBar.Visibility = Visibility.Collapsed;
+                                videoMedia.Visibility = Visibility.Visible;
+
                                 if (videoMedia.NaturalDuration.HasTimeSpan)
                                 {
                                     videoSlider.Maximum = videoMedia.NaturalDuration.TimeSpan.TotalSeconds;
@@ -805,9 +854,11 @@ namespace YMM4FileExplorer
 
                             var videoGrid = new Grid();
                             videoGrid.Children.Add(videoMedia);
+                            videoGrid.Children.Add(progressBar);
                             videoGrid.Children.Add(videoSlider);
 
                             PreviewContent.Content = videoGrid;
+                            videoMedia.Source = new Uri(fullPath);
                             videoMedia.Play();
                             _timer.Start();
                             break;
@@ -999,7 +1050,6 @@ namespace YMM4FileExplorer
                 case ".jpg":
                 case ".jpeg":
                 case ".bmp":
-                case ".gif":
                     var image = new Image { Source = selectedItem.Thumbnail, Stretch = Stretch.Uniform };
                     PreviewContentHost.Content = image;
 
@@ -1016,20 +1066,32 @@ namespace YMM4FileExplorer
                 case ".wmv":
                 case ".avi":
                 case ".mov":
+                case ".gif":
                     var videoSlider = new Slider { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10) };
                     var videoMedia = new MediaElement
                     {
-                        Source = new Uri(selectedItem.FullPath),
                         Volume = FileExplorerSettings.Default.PreviewVolumePercentage / 100d,
                         Stretch = Stretch.Uniform,
                         LoadedBehavior = MediaState.Manual,
                         UnloadedBehavior = MediaState.Manual,
+                        Visibility = Visibility.Collapsed,
+                    };
+
+                    var progressBar = new ProgressBar
+                    {
+                        IsIndeterminate = true,
+                        Width = 50,
+                        Height = 50,
+                        Style = (Style)FindResource("CircularProgressBar"),
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
                     };
 
                     _largePreviewMediaElement = videoMedia;
                     MediaControlsPanel.Visibility = Visibility.Visible;
                     PlayButton.Visibility = Visibility.Collapsed;
                     PauseButton.Visibility = Visibility.Visible;
+
                     videoMedia.MediaEnded += (s, args) =>
                     {
                         PlayButton.Visibility = Visibility.Visible;
@@ -1052,6 +1114,9 @@ namespace YMM4FileExplorer
 
                     videoMedia.MediaOpened += (s, args) =>
                     {
+                        progressBar.Visibility = Visibility.Collapsed;
+                        videoMedia.Visibility = Visibility.Visible;
+
                         if (videoMedia.NaturalDuration.HasTimeSpan)
                         {
                             videoSlider.Maximum = videoMedia.NaturalDuration.TimeSpan.TotalSeconds;
@@ -1066,8 +1131,11 @@ namespace YMM4FileExplorer
 
                     var videoGrid = new Grid();
                     videoGrid.Children.Add(videoMedia);
+                    videoGrid.Children.Add(progressBar);
+
                     PreviewContentHost.Content = videoGrid;
 
+                    videoMedia.Source = new Uri(selectedItem.FullPath);
                     videoMedia.Play();
                     _largePreviewTimer.Start();
                     break;
@@ -1513,6 +1581,7 @@ namespace YMM4FileExplorer
 
         private void FileExplorerControl_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // 戻る・進む
             if (e.ChangedButton == MouseButton.XButton1)
             {
                 BackButton_Click(sender, e);
@@ -1521,6 +1590,16 @@ namespace YMM4FileExplorer
             else if (e.ChangedButton == MouseButton.XButton2)
             {
                 ForwardButton_Click(sender, e);
+                e.Handled = true;
+            }
+
+            // ホームにいく
+            else if (e.ChangedButton == MouseButton.Middle)
+            {
+                if (GoHomeCommand.CanExecute(null))
+                {
+                    GoHomeCommand.Execute(null);
+                }
                 e.Handled = true;
             }
         }
@@ -1595,33 +1674,76 @@ namespace YMM4FileExplorer
 
         private void DirectoryTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
-            if (DirectoryTree.SelectedItem is not TreeViewItem selectedItem || selectedItem.Tag is not string path)
+            var hitTestResult = VisualTreeHelper.HitTest(DirectoryTree, Mouse.GetPosition(DirectoryTree));
+            if (hitTestResult == null)
             {
                 e.Handled = true;
                 return;
             }
 
-            bool isFavorite = FileExplorerSettings.Default.Favorites.Any(f => f.FullPath.Equals(path, StringComparison.OrdinalIgnoreCase));
+            var targetItem = FindAncestor<TreeViewItem>(hitTestResult.VisualHit);
 
-            AddFavoriteMenuItem.Visibility = isFavorite ? Visibility.Collapsed : Visibility.Visible;
-            RemoveFavoriteMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
+            if (targetItem != null)
+            {
+                AddFavoriteMenuItem.DataContext = targetItem;
+                RemoveFavoriteMenuItem.DataContext = targetItem;
+
+                GoHomeMenuItem.Visibility = Visibility.Collapsed;
+                AddFavoriteMenuItem.Visibility = Visibility.Visible;
+                RemoveFavoriteMenuItem.Visibility = Visibility.Visible;
+
+                if (targetItem.Tag is string path)
+                {
+                    bool isFavorite = FileExplorerSettings.Default.Favorites.Any(f => f.FullPath.Equals(path, StringComparison.OrdinalIgnoreCase));
+                    AddFavoriteMenuItem.Visibility = isFavorite ? Visibility.Collapsed : Visibility.Visible;
+                    RemoveFavoriteMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+            else
+            {
+                GoHomeMenuItem.Visibility = Visibility.Visible;
+                AddFavoriteMenuItem.Visibility = Visibility.Collapsed;
+                RemoveFavoriteMenuItem.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        // TreeViewItemを探すためのヘルパーメソッド
+        private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+        {
+            do
+            {
+                if (current is T ancestor)
+                {
+                    return ancestor;
+                }
+                current = VisualTreeHelper.GetParent(current);
+            }
+            while (current != null);
+            return null;
         }
 
         private void AddFavorite_Click(object sender, RoutedEventArgs e)
         {
-            if (DirectoryTree.SelectedItem is TreeViewItem selectedItem && selectedItem.Tag is string path)
+            if (sender is MenuItem menuItem &&
+                menuItem.DataContext is TreeViewItem targetItem &&
+                targetItem.Tag is string path)
             {
                 var dirInfo = new DirectoryInfo(path);
                 var newFavorite = new FavoriteItem { Name = dirInfo.Name, FullPath = path };
 
-                FileExplorerSettings.Default.Favorites.Add(newFavorite);
-                FileExplorerSettings.Default.Save();
+                if (!FileExplorerSettings.Default.Favorites.Any(f => f.FullPath.Equals(path, StringComparison.OrdinalIgnoreCase)))
+                {
+                    FileExplorerSettings.Default.Favorites.Add(newFavorite);
+                    FileExplorerSettings.Default.Save();
+                }
             }
         }
 
         private void RemoveFavorite_Click(object sender, RoutedEventArgs e)
         {
-            if (DirectoryTree.SelectedItem is TreeViewItem selectedItem && selectedItem.Tag is string path)
+            if (sender is MenuItem menuItem &&
+                menuItem.DataContext is TreeViewItem targetItem &&
+                targetItem.Tag is string path)
             {
                 var favoriteToRemove = FileExplorerSettings.Default.Favorites
                     .FirstOrDefault(f => f.FullPath.Equals(path, StringComparison.OrdinalIgnoreCase));

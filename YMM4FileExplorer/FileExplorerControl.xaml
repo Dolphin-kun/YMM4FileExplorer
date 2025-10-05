@@ -13,11 +13,9 @@
              PreviewMouseDown="FileExplorerControl_PreviewMouseDown">
 
     <UserControl.Resources>
-        <!-- 詳細ListView -->
-        <ContextMenu x:Key="ItemContextMenu">
-            <MenuItem Header="大きく表示" Click="ShowLargePreview_Click"/>
-        </ContextMenu>
+        <helpers:BytesToHumanReadableStringConverter x:Key="BytesConverter"/>
 
+        <!-- 詳細ListView -->
         <Style x:Key="DetailsViewItemContainerStyle" TargetType="ListViewItem">
             <Setter Property="ContextMenu" Value="{StaticResource ItemContextMenu}"/>
             <Setter Property="Template">
@@ -44,9 +42,20 @@
             </Style.Triggers>
         </Style>
 
+        <!-- アイコンListView -->
         <Style x:Key="IconViewItemContainerStyle" TargetType="ListViewItem">
             <Setter Property="ContextMenu" Value="{StaticResource ItemContextMenu}"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="ToolTip">
+                <Setter.Value>
+                    <ToolTip MaxWidth="300">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Name}" TextWrapping="Wrap" FontWeight="Bold" />
+                            <TextBlock Text="{Binding SizeInBytes, Converter={StaticResource BytesConverter}, StringFormat='サイズ: {0}'}" />
+                        </StackPanel>
+                    </ToolTip>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <DataTemplate x:Key="IconViewTemplate">
@@ -77,6 +86,63 @@
                                     Width="1"
                                     Fill="LightGray"/>
                         </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <ContextMenu x:Key="ItemContextMenu">
+            <MenuItem Header="大きく表示" Click="ShowLargePreview_Click"/>
+        </ContextMenu>
+
+        <!-- ProgressBar -->
+        <Style x:Key="CircularProgressBar" TargetType="ProgressBar">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Viewbox>
+                            <Grid Width="50" Height="50"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center">
+
+                                <Path Stroke="DodgerBlue"
+                              StrokeThickness="5"
+                              x:Name="SpinnerPath">
+                                    <Path.Data>
+                                        <EllipseGeometry Center="25,25" RadiusX="20" RadiusY="20" />
+                                    </Path.Data>
+
+                                    <Path.StrokeDashArray>
+                                        <DoubleCollection>
+                                            0.1 3.5
+                                        </DoubleCollection>
+                                    </Path.StrokeDashArray>
+
+                                    <Path.StrokeDashCap>Round</Path.StrokeDashCap>
+                                </Path>
+
+                            </Grid>
+                        </Viewbox>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsIndeterminate" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="SpinnerPath"
+                                                     Storyboard.TargetProperty="StrokeDashOffset"
+                                                     From="3.6"
+                                                     To="0"
+                                                     Duration="0:0:1.5"
+                                                     RepeatBehavior="Forever">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseInOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -177,17 +243,17 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal">
-                <Button x:Name="BackButton" Click="BackButton_Click" IsEnabled="False" Width="26" Height="20" Padding="4" Margin="0,0,2,0">
+                <Button x:Name="BackButton" Click="BackButton_Click" IsEnabled="False" Width="26" Height="20" Padding="4" Margin="0,0,2,0" ToolTip="戻る">
                     <Path Data="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"
                   Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                   Stretch="Uniform" />
                 </Button>
-                <Button x:Name="ForwardButton" Click="ForwardButton_Click" IsEnabled="False" Width="26" Height="20" Padding="4" Margin="0,0,10,0">
+                <Button x:Name="ForwardButton" Click="ForwardButton_Click" IsEnabled="False" Width="26" Height="20" Padding="4" Margin="0,0,10,0" ToolTip="進む">
                     <Path Data="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"
                   Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                   Stretch="Uniform" />
                 </Button>
-                <Button x:Name="ReloadButton" Click="ReloadButton_Click" Width="26" Height="20" Padding="4">
+                <Button x:Name="ReloadButton" Click="ReloadButton_Click" Width="26" Height="20" Padding="4" ToolTip="更新">
                     <Path Data="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"
                   Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                   Stretch="Uniform" />
@@ -196,10 +262,10 @@
 
             <DockPanel Grid.Column="1" Margin="10,0,10,0">
                 <CheckBox x:Name="SearchSubdirectoriesCheckBox" ToolTip="サブフォルダも検索" VerticalAlignment="Center" IsChecked="True" DockPanel.Dock="Right" Margin="5,0,0,0"/>
-                <TextBox x:Name="SearchTextBox" VerticalAlignment="Center" KeyDown="SearchTextBox_KeyDown" TextChanged="SearchTextBox_TextChanged" MinWidth="20"/>
+                <TextBox x:Name="SearchTextBox" VerticalAlignment="Center" ToolTip="検索" KeyDown="SearchTextBox_KeyDown" TextChanged="SearchTextBox_TextChanged" MinWidth="20"/>
             </DockPanel>
 
-            <c:DropDownButton Grid.Column="2" Content="{DynamicResource menu}" Width="20">
+            <c:DropDownButton Grid.Column="2" Content="{DynamicResource menu}" Width="20" ToolTip="表示形式">
                 <c:DropDownButton.Style>
                     <Style TargetType="c:DropDownButton" BasedOn="{StaticResource {x:Type ToggleButton}}"/>
                 </c:DropDownButton.Style>
@@ -224,15 +290,19 @@
             <TreeView x:Name="DirectoryTree"
               SelectedItemChanged="DirectoryTree_SelectedItemChanged"
               ContextMenuOpening="DirectoryTree_ContextMenuOpening"
-              MouseDoubleClick="DirectoryTree_MouseDoubleClick">
+              MouseDoubleClick="DirectoryTree_MouseDoubleClick"
+                        PreviewMouseRightButtonDown="DirectoryTree_PreviewMouseRightButtonDown">
                 <TreeView.ContextMenu>
-                    <ContextMenu>
+                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                         <MenuItem x:Name="AddFavoriteMenuItem" 
                           Header="お気に入りに追加" 
                           Click="AddFavorite_Click"/>
                         <MenuItem x:Name="RemoveFavoriteMenuItem" 
                           Header="お気に入りから削除" 
                           Click="RemoveFavorite_Click"/>
+                        <MenuItem x:Name="GoHomeMenuItem"
+                                  Header="ホームに戻る"
+                                  Command="{Binding GoHomeCommand}"/>
                     </ContextMenu>
                 </TreeView.ContextMenu>
             </TreeView>

@@ -2,7 +2,7 @@
 
 namespace YMM4FileExplorer
 {
-    public class FileExplorerViewModel: INotifyPropertyChanged
+    public class OpenFileExplorerViewModel: INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
 
