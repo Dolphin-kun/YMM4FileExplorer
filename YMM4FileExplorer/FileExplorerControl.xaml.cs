@@ -65,7 +65,7 @@ namespace YMM4FileExplorer
             FileExplorerControl_Loaded();
             this.Unloaded += FileExplorerControl_Unloaded;
 
-            GoHomeCommand = new ActionCommand(_=> true, async _ =>
+            GoHomeCommand = new ActionCommand(_ => true, async _ =>
             {
                 string? targetPath = string.IsNullOrEmpty(_currentDirectory)
                     ? _initialPath
@@ -296,6 +296,18 @@ namespace YMM4FileExplorer
 
                     foreach (var dir in directories)
                     {
+                        if (!CanAccessDirectory(dir.FullName))
+                        {
+                            var inaccessibleItem = new TreeViewItem
+                            {
+                                Header = await CreateTreeViewItemHeaderAsync(dir.Name, dir.FullName),
+                                Tag = dir.FullName,
+                                IsEnabled = false // 選択不可
+                            };
+                            item.Items.Add(inaccessibleItem);
+                            continue;
+                        }
+
                         var subItem = new TreeViewItem
                         {
                             Header = await CreateTreeViewItemHeaderAsync(dir.Name, dir.FullName),
@@ -304,9 +316,7 @@ namespace YMM4FileExplorer
 
                         try
                         {
-                            bool hasSubDirs = await Task.Run(
-                                () => Directory.EnumerateDirectories(dir.FullName).Any()
-                            );
+                            bool hasSubDirs = CanAccessDirectory(dir.FullName) && Directory.EnumerateDirectories(dir.FullName).Any();
 
                             if (hasSubDirs)
                             {
@@ -341,7 +351,6 @@ namespace YMM4FileExplorer
         {
             if (!Directory.Exists(path)) return;
 
-           
             var dirInfo = new DirectoryInfo(path);
             if (dirInfo.Parent == null)
             {
@@ -373,10 +382,50 @@ namespace YMM4FileExplorer
 
             try
             {
-                var directories = await Task.Run(() =>
-                    dirInfo.GetDirectories()
-                           .Where(dir => FileExplorerSettings.Default.ShowHiddenFiles || !dir.Attributes.HasFlag(FileAttributes.Hidden))
-                           .ToList());
+                var directories = new List<DirectoryInfo>();
+
+                try
+                {
+                    foreach (var dir in dirInfo.EnumerateDirectories())
+                    {
+                        if (!CanAccessDirectory(dir.FullName))
+                        {
+                            var inaccessibleItem = new TreeViewItem
+                            {
+                                Header = await CreateTreeViewItemHeaderAsync(dir.Name, dir.FullName),
+                                Tag = dir.FullName,
+                                IsEnabled = false // 選択できないように
+                            };
+                            rootItem.Items.Add(inaccessibleItem);
+                            continue;
+                        }
+
+                        // 通常のフォルダ
+                        var subItem = new TreeViewItem
+                        {
+                            Header = await CreateTreeViewItemHeaderAsync(dir.Name, dir.FullName),
+                            Tag = dir.FullName
+                        };
+
+                        if (CanAccessDirectory(dir.FullName))
+                        {
+                            try
+                            {
+                                if (Directory.EnumerateDirectories(dir.FullName).Any())
+                                    subItem.Items.Add(null);
+                            }
+                            catch { /* アクセス不可は無視 */ }
+                        }
+
+                        subItem.Expanded += Folder_Expanded;
+                        rootItem.Items.Add(subItem);
+
+                    }
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    Debug.WriteLine($"ディレクトリ列挙自体にアクセスできません: {dirInfo.FullName}");
+                }
 
                 foreach (var dir in directories)
                 {
@@ -460,23 +509,48 @@ namespace YMM4FileExplorer
             if (!Directory.Exists(path)) return;
 
             _watcher?.Dispose();
+            _watcher = null;
+
             SearchTextBox.Text = string.Empty;
             _currentDirectory = path;
             await LoadFilesAsync(path);
 
-            _watcher = new FileSystemWatcher(path)
+            if (CanAccessDirectory(path))
             {
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
-                EnableRaisingEvents = true,
-            };
-            _watcher.Created += OnFileSystemChanged;
-            _watcher.Deleted += OnFileSystemChanged;
-            _watcher.Renamed += OnFileSystemChanged;
+                try
+                {
+                    _watcher = new FileSystemWatcher(path)
+                    {
+                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
+                        EnableRaisingEvents = true,
+                    };
+                    _watcher.Created += OnFileSystemChanged;
+                    _watcher.Deleted += OnFileSystemChanged;
+                    _watcher.Renamed += OnFileSystemChanged;
+                }
+                catch (Exception ex)
+                {
+                    _watcher = null;
+                }
+            }
 
             PathChanged?.Invoke(path);
             if (addToHistory && !_isNavigatingViaHistory)
             {
                 AddHistory(path);
+            }
+        }
+
+        private bool CanAccessDirectory(string path)
+        {
+            try
+            {
+                Directory.GetDirectories(path);
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -494,12 +568,10 @@ namespace YMM4FileExplorer
                     //ディレクトリ
                     foreach (var dir in Directory.EnumerateDirectories(path))
                     {
+                        if (!CanAccessDirectory(dir)) continue;
                         var info = new DirectoryInfo(dir);
 
-                        if (
-                            !FileExplorerSettings.Default.ShowHiddenFiles
-                            && info.Attributes.HasFlag(FileAttributes.Hidden)
-                        )
+                        if (!FileExplorerSettings.Default.ShowHiddenFiles && info.Attributes.HasFlag(FileAttributes.Hidden))
                             continue;
 
                         var icon = await ShellIcon.GetIconAsync(dir, true);
@@ -553,6 +625,16 @@ namespace YMM4FileExplorer
                     }
                 });
 
+            }
+            catch (UnauthorizedAccessException)
+            {
+                fileCollection.Add(new FileItem
+                {
+                    Name = "アクセス不可能なフォルダです",
+                    FullPath = path,
+                    Type = "",
+                    IsDirectory = true,
+                });
             }
             catch (Exception ex)
             {
@@ -1023,7 +1105,7 @@ namespace YMM4FileExplorer
             PreviewName.Text = selectedItem.Name;
             PreviewColumn.Width = new GridLength(300);
             LargePreviewSplitter.Visibility = Visibility.Visible;
-            LargePreviewPane.Visibility = Visibility.Visible;
+            LargePreviewPanel.Visibility = Visibility.Visible;
 
             if (selectedItem.IsDirectory || string.IsNullOrEmpty(selectedItem.FullPath))
             {
@@ -1233,7 +1315,7 @@ namespace YMM4FileExplorer
 
             PreviewContentHost.Content = null;
 
-            LargePreviewPane.Visibility = Visibility.Collapsed;
+            LargePreviewPanel.Visibility = Visibility.Collapsed;
             LargePreviewSplitter.Visibility = Visibility.Collapsed;
             PreviewColumn.Width = new GridLength(0, GridUnitType.Auto);
         }
@@ -1555,7 +1637,7 @@ namespace YMM4FileExplorer
                 await SelectTreeViewItemByPathAsync(pathToNavigate);
             }
 
-            if (Directory.Exists(pathToNavigate))
+            if (Directory.Exists(pathToNavigate) && CanAccessDirectory(pathToNavigate))
             {
                 _currentDirectory = pathToNavigate;
 

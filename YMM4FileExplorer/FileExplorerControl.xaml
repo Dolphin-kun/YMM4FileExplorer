@@ -15,6 +15,10 @@
     <UserControl.Resources>
         <helpers:BytesToHumanReadableStringConverter x:Key="BytesConverter"/>
 
+        <ContextMenu x:Key="ItemContextMenu">
+            <MenuItem Header="大きく表示" Click="ShowLargePreview_Click"/>
+        </ContextMenu>
+        
         <!-- 詳細ListView -->
         <Style x:Key="DetailsViewItemContainerStyle" TargetType="ListViewItem">
             <Setter Property="ContextMenu" Value="{StaticResource ItemContextMenu}"/>
@@ -90,11 +94,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
-        <ContextMenu x:Key="ItemContextMenu">
-            <MenuItem Header="大きく表示" Click="ShowLargePreview_Click"/>
-        </ContextMenu>
-
+        
         <!-- ProgressBar -->
         <Style x:Key="CircularProgressBar" TargetType="ProgressBar">
             <Setter Property="Template">
@@ -351,9 +351,8 @@
                       Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
                       Visibility="Collapsed"/>
 
-        <DockPanel x:Name="LargePreviewPane"
+        <DockPanel x:Name="LargePreviewPanel"
                    Grid.Row="1" Grid.Column="4"
-                   MinWidth="200"
                    Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
                    Visibility="Collapsed">
             <Border BorderBrush="{DynamicResource {x:Static theme:YMM4Colors.IconBrushKey}}" BorderThickness="0.5" Margin="5,0,5,5">
