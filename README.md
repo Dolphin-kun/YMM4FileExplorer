@@ -1,5 +1,8 @@
 # 「YMM4エクスプローラー」プラグイン
 
+> [!Note]
+> このプラグインはゆっくりMovieMakerv4.48.0.0より「エクスプローラー」ツールが使用可能となったため、更新を終了いたしました。
+
 ### [最新バージョンをダウンロード](https://github.com/Dolphin-kun/YMM4FileExplorer/releases/latest)
 
 ## 概要
